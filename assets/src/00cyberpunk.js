@@ -186,7 +186,7 @@ loadState.init = function() {
 
 // ─── Score communication with parent platform ───
 (function() {
-  // Poll projectInfo.score every second and send to parent
+  // Send live score updates to parent
   var lastScore = 0;
   setInterval(function() {
     if (typeof projectInfo !== 'undefined' && projectInfo.score !== lastScore) {
@@ -197,10 +197,16 @@ loadState.init = function() {
     }
   }, 1000);
 
-  // Hook into game over detection
-  var checkGameOver = setInterval(function() {
-    if (typeof playState !== 'undefined' && playState.gameInfo && playState.gameInfo.gameOver) {
-      clearInterval(checkGameOver);
+  // Detect game over and wait for final score (time + AI bonuses are added over ~6s)
+  var gameOverSent = false;
+  setInterval(function() {
+    if (gameOverSent) return;
+    if (typeof playState === 'undefined' || !playState.gameInfo) return;
+    var gi = playState.gameInfo;
+    // gameOver flag is set, but score is still being animated
+    // Wait until quit/replay buttons are visible (means all bonuses applied)
+    if (gi.gameOver && gi.quitButton2 && gi.quitButton2.visible) {
+      gameOverSent = true;
       var finalScore = (typeof projectInfo !== 'undefined') ? projectInfo.score : 0;
       try {
         window.parent.postMessage({ type: 'GAME_OVER', finalScore: finalScore }, '*');

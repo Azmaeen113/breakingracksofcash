@@ -4,36 +4,23 @@ import { useUser } from '@/context/UserContext';
 import { TASKS } from '@/config/tasks';
 import { completeTask } from '@/services/firestore';
 import {
-  FaTwitter, FaYoutube, FaGlobe, FaInstagram, FaTiktok, FaDiscord,
-  FaUsers, FaCheck, FaExternalLinkAlt, FaCoins
+  FaUsers, FaCheck, FaExternalLinkAlt, FaCoins, FaWallet
 } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 
-// Social images available: telegram, ton, whatsapp
-const SOCIAL_IMAGES: Record<string, string> = {
-  telegram: '/images/social/telegram.png',
-  wallet: '/images/social/ton.png',
-};
-
 const ICON_MAP: Record<string, React.ComponentType<any>> = {
-  twitter: FaTwitter,
-  youtube: FaYoutube,
-  globe: FaGlobe,
-  instagram: FaInstagram,
-  tiktok: FaTiktok,
-  discord: FaDiscord,
   users: FaUsers,
+  wallet: FaWallet,
 };
 
 export default function TasksPage() {
   const { user, userId, refreshUser } = useUser();
   const [claiming, setClaiming] = useState<string | null>(null);
-  const [tab, setTab] = useState<'social' | 'referral'>('social');
 
   if (!user) return null;
 
   const completedTasks = user.completedTasks || [];
-  const filtered = TASKS.filter(t => tab === 'social' ? t.type === 'social' : t.type === 'referral');
+  const filtered = TASKS;
 
   const handleClaim = async (taskId: string, reward: number) => {
     if (claiming) return;
@@ -68,23 +55,6 @@ export default function TasksPage() {
         <p className="text-xs text-gray-500">Complete tasks to earn CASH</p>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2">
-        {(['social', 'referral'] as const).map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`flex-1 py-2.5 rounded-xl font-orbitron text-xs transition-all ${
-              tab === t
-                ? 'bg-cyber-cyan/20 text-cyber-cyan border border-cyber-cyan/30'
-                : 'bg-cyber-dark/50 text-gray-500 border border-gray-700/30'
-            }`}
-          >
-            {t === 'social' ? 'Social Tasks' : 'Referral Tasks'}
-          </button>
-        ))}
-      </div>
-
       {/* Total earned from tasks */}
       <div className="glass-card p-3 flex items-center justify-between">
         <span className="text-xs text-gray-500">Completed</span>
@@ -96,7 +66,7 @@ export default function TasksPage() {
         <AnimatePresence mode="popLayout">
           {filtered.map((task, idx) => {
             const isDone = completedTasks.includes(task.id);
-            const Icon = ICON_MAP[task.icon] || FaGlobe;
+            const Icon = ICON_MAP[task.icon] || FaUsers;
             return (
               <motion.div
                 key={task.id}
@@ -111,8 +81,6 @@ export default function TasksPage() {
                 }`}>
                   {isDone ? (
                     <FaCheck className="text-green-400" />
-                  ) : SOCIAL_IMAGES[task.icon] ? (
-                    <img src={SOCIAL_IMAGES[task.icon]} alt={task.icon} className="w-6 h-6 object-contain" />
                   ) : (
                     <Icon className="text-cyber-cyan text-lg" />
                   )}

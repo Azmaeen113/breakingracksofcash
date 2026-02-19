@@ -9,23 +9,18 @@ export default function GamePage() {
   const { user, userId, vipMultiplier, refreshUser } = useUser();
   const navigate = useNavigate();
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [started, setStarted] = useState(false);
   const [gameEnded, setGameEnded] = useState(false);
   const earnedRef = useRef(0);
 
-  // Spend energy on mount
+  // Spend energy in background — don't block game loading
   useEffect(() => {
     let cancelled = false;
-    const init = async () => {
-      const success = await spendEnergy(userId);
+    spendEnergy(userId).then(success => {
       if (!success && !cancelled) {
         toast.error('No energy left!');
         navigate('/', { replace: true });
-        return;
       }
-      if (!cancelled) setStarted(true);
-    };
-    init();
+    });
     return () => { cancelled = true; };
   }, [userId, navigate]);
 
@@ -56,14 +51,6 @@ export default function GamePage() {
   const goHome = () => {
     navigate('/', { replace: true });
   };
-
-  if (!started) {
-    return (
-      <div className="fixed inset-0 bg-cyber-dark flex items-center justify-center z-[200]">
-        <div className="w-10 h-10 border-2 border-cyber-cyan/30 border-t-cyber-cyan rounded-full animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <div className="fixed inset-0 z-[200] bg-black flex flex-col">

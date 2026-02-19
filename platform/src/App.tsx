@@ -56,10 +56,10 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-cyber-dark text-white relative">
+    <div className="min-h-screen bg-cyber-dark text-white relative overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
       <div className="embers-bg" />
       <Header />
-      <main className="pt-20 pb-20 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <main className="pt-20 pb-20">
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/tasks" element={<TasksPage />} />
