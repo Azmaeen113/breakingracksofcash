@@ -184,4 +184,29 @@ loadState.init = function() {
   }
 };
 
+// ─── Score communication with parent platform ───
+(function() {
+  // Poll projectInfo.score every second and send to parent
+  var lastScore = 0;
+  setInterval(function() {
+    if (typeof projectInfo !== 'undefined' && projectInfo.score !== lastScore) {
+      lastScore = projectInfo.score;
+      try {
+        window.parent.postMessage({ type: 'GAME_SCORE_UPDATE', score: lastScore }, '*');
+      } catch(e) {}
+    }
+  }, 1000);
+
+  // Hook into game over detection
+  var checkGameOver = setInterval(function() {
+    if (typeof playState !== 'undefined' && playState.gameInfo && playState.gameInfo.gameOver) {
+      clearInterval(checkGameOver);
+      var finalScore = (typeof projectInfo !== 'undefined') ? projectInfo.score : 0;
+      try {
+        window.parent.postMessage({ type: 'GAME_OVER', finalScore: finalScore }, '*');
+      } catch(e) {}
+    }
+  }, 500);
+})();
+
 console.log('%c BREAKING RACKS 4 CASH ', 'background: #0d0221; color: #00FFF0; font-size: 20px; font-weight: bold; padding: 10px; border: 2px solid #FF2D95; text-shadow: 0 0 10px #00FFF0;');
