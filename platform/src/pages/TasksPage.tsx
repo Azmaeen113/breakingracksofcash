@@ -22,8 +22,15 @@ export default function TasksPage() {
   const completedTasks = user.completedTasks || [];
   const filtered = TASKS;
 
-  const handleClaim = async (taskId: string, reward: number) => {
+  const handleClaim = async (taskId: string, reward: number, task: typeof TASKS[0]) => {
     if (claiming) return;
+
+    // Validate referral tasks
+    if (task.referralCount && (user.referralCount || 0) < task.referralCount) {
+      toast.error(`You need ${task.referralCount} referrals (have ${user.referralCount || 0})`);
+      return;
+    }
+
     setClaiming(taskId);
     try {
       await completeTask(userId, taskId, reward);
@@ -110,7 +117,7 @@ export default function TasksPage() {
                       </button>
                     )}
                     <button
-                      onClick={() => handleClaim(task.id, task.reward)}
+                      onClick={() => handleClaim(task.id, task.reward, task)}
                       disabled={claiming === task.id}
                       className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-cyber-cyan to-cyber-purple text-[10px] text-white font-orbitron disabled:opacity-50"
                     >

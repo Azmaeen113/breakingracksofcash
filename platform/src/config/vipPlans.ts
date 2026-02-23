@@ -5,7 +5,7 @@ export const VIP_PLANS: VipPlan[] = [
     tier: 1,
     name: 'Bronze',
     priceUSD: 5,
-    durationDays: 30,
+    durationDays: 7,
     benefits: ['6x tap damage', '1.05x game multiplier', '2 cooldown resets'],
     cooldownItems: 2,
     color: '#CD7F32',
@@ -14,8 +14,8 @@ export const VIP_PLANS: VipPlan[] = [
   {
     tier: 2,
     name: 'Silver',
-    priceUSD: 50,
-    durationDays: 30,
+    priceUSD: 10,
+    durationDays: 15,
     benefits: ['11x tap damage', '1.10x game multiplier', '5 cooldown resets'],
     cooldownItems: 5,
     color: '#C0C0C0',
@@ -24,7 +24,7 @@ export const VIP_PLANS: VipPlan[] = [
   {
     tier: 3,
     name: 'Gold',
-    priceUSD: 100,
+    priceUSD: 20,
     durationDays: 30,
     benefits: ['16x tap damage', '1.15x game multiplier', '10 cooldown resets'],
     cooldownItems: 10,

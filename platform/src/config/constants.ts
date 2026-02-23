@@ -27,7 +27,27 @@ export const SEASON_PRIZES: PrizeTier[] = [
   { rankStart: 41, rankEnd: 50, prize: 5 },
 ];
 
-export const TAP_CYCLE_TOTAL = 1000;
+export const WEEKLY_PRIZES: PrizeTier[] = [
+  { rankStart: 1,  rankEnd: 1,  prize: 500 },
+  { rankStart: 2,  rankEnd: 2,  prize: 300 },
+  { rankStart: 3,  rankEnd: 3,  prize: 150 },
+  { rankStart: 4,  rankEnd: 5,  prize: 100 },
+  { rankStart: 6,  rankEnd: 10, prize: 50 },
+  { rankStart: 11, rankEnd: 20, prize: 25 },
+  { rankStart: 21, rankEnd: 50, prize: 10 },
+];
+
+export const MONTHLY_PRIZES: PrizeTier[] = [
+  { rankStart: 1,  rankEnd: 1,  prize: 2000 },
+  { rankStart: 2,  rankEnd: 2,  prize: 1000 },
+  { rankStart: 3,  rankEnd: 3,  prize: 500 },
+  { rankStart: 4,  rankEnd: 5,  prize: 300 },
+  { rankStart: 6,  rankEnd: 10, prize: 150 },
+  { rankStart: 11, rankEnd: 20, prize: 75 },
+  { rankStart: 21, rankEnd: 50, prize: 25 },
+];
+
+export const TAP_CYCLE_TOTAL = 2500;
 export const TAP_CYCLE_BONUS = 1000;
 export const TAP_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24h
 export const COOLDOWN_RESET_REDUCTION_MS = 12 * 60 * 60 * 1000; // 12h

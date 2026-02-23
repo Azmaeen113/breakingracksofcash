@@ -10,23 +10,29 @@ export default function GamePage() {
   const navigate = useNavigate();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [gameEnded, setGameEnded] = useState(false);
+  const gameEndedRef = useRef(false);
   const earnedRef = useRef(0);
 
   // Spend energy in background — don't block game loading
   useEffect(() => {
     let cancelled = false;
-    spendEnergy(userId).then(success => {
-      if (!success && !cancelled) {
+    spendEnergy(userId).then(async (success) => {
+      if (cancelled) return;
+      if (!success) {
         toast.error('No energy left!');
         navigate('/', { replace: true });
+      } else {
+        // Update local state so energy UI reflects the spend
+        await refreshUser();
       }
     });
     return () => { cancelled = true; };
-  }, [userId, navigate]);
+  }, [userId, navigate, refreshUser]);
 
   // Listen for game messages
   const handleGameOver = useCallback(async (score: number) => {
-    if (gameEnded) return;
+    if (gameEndedRef.current) return;
+    gameEndedRef.current = true;
     setGameEnded(true);
     const earned = await addGameScore(userId, score);
     earnedRef.current = earned;
@@ -36,17 +42,29 @@ export default function GamePage() {
       duration: 4000,
       style: { background: '#1a0a2e', color: '#fff', border: '1px solid rgba(0,255,255,0.3)' },
     });
-  }, [userId, refreshUser, gameEnded]);
+  }, [userId, refreshUser]);
 
   useEffect(() => {
     function handler(e: MessageEvent) {
       if (e.data?.type === 'GAME_OVER') {
         handleGameOver(e.data.finalScore || 0);
       }
+      if (e.data?.type === 'GO_HOME') {
+        const score = e.data.finalScore || 0;
+        // Only add score if GAME_OVER hasn't already been processed
+        if (score > 0 && !gameEndedRef.current) {
+          gameEndedRef.current = true;
+          setGameEnded(true);
+          addGameScore(userId, score).then(() => refreshUser()).catch(() => {});
+        } else {
+          refreshUser().catch(() => {});
+        }
+        navigate('/', { replace: true });
+      }
     }
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [handleGameOver]);
+  }, [handleGameOver, navigate, userId, refreshUser]);
 
   const goHome = () => {
     navigate('/', { replace: true });

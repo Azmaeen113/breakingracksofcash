@@ -36,6 +36,11 @@ export async function createUser(userId: string, data: Partial<UserData>): Promi
     cooldownResets: 0,
     vipTier: 0,
     vipExpiresAt: null,
+    isPremium: false,
+    weeklyCash: 0,
+    monthlyCash: 0,
+    weeklyResetAt: null,
+    monthlyResetAt: null,
     dailyRewardDay: 0,
     lastDailyReward: null,
     completedTasks: [],
@@ -90,6 +95,8 @@ export async function addGameScore(userId: string, rawScore: number): Promise<nu
   await updateDoc(doc(db, 'users', userId), {
     cashBalance: increment(finalScore),
     seasonCash: increment(finalScore),
+    weeklyCash: increment(finalScore),
+    monthlyCash: increment(finalScore),
     totalScore: increment(finalScore),
     gamesPlayed: increment(1),
     highScore: Math.max(user.highScore || 0, finalScore),
@@ -105,20 +112,24 @@ export async function processTapBatch(userId: string, taps: number, tapDamage: n
   if (!user) return;
   if (user.tapCooldownUntil && Date.now() < user.tapCooldownUntil) return;
 
-  const newProgress = Math.min(user.tapCycleProgress + (taps * tapDamage), 1000);
+  const newProgress = Math.min(user.tapCycleProgress + (taps * tapDamage), 2500);
   const cashEarned = taps;
   const updates: Record<string, any> = {
     tapCycleProgress: newProgress,
     tapCount: increment(taps),
     cashBalance: increment(cashEarned),
     seasonCash: increment(cashEarned),
+    weeklyCash: increment(cashEarned),
+    monthlyCash: increment(cashEarned),
   };
 
-  if (newProgress >= 1000) {
+  if (newProgress >= 2500) {
     updates.tapCycleProgress = 0;
     updates.tapCooldownUntil = Date.now() + TAP_COOLDOWN_MS;
     updates.cashBalance = increment(cashEarned + TAP_CYCLE_BONUS);
     updates.seasonCash = increment(cashEarned + TAP_CYCLE_BONUS);
+    updates.weeklyCash = increment(cashEarned + TAP_CYCLE_BONUS);
+    updates.monthlyCash = increment(cashEarned + TAP_CYCLE_BONUS);
     updates.cooldownResets = increment(1);
   }
 
@@ -148,6 +159,8 @@ export async function completeTask(userId: string, taskId: string, reward: numbe
     completedTasks: arrayUnion(taskId),
     cashBalance: increment(reward),
     seasonCash: increment(reward),
+    weeklyCash: increment(reward),
+    monthlyCash: increment(reward),
   });
   await logTransaction(userId, 'credit', reward, `Task completed: ${taskId}`);
   return true;
@@ -176,6 +189,8 @@ export async function claimDailyReward(userId: string, day: number, reward: numb
     lastDailyReward: Timestamp.now(),
     cashBalance: increment(reward),
     seasonCash: increment(reward),
+    weeklyCash: increment(reward),
+    monthlyCash: increment(reward),
   });
   await logTransaction(userId, 'credit', reward, `Daily reward day ${newDay}`);
   return true;
@@ -203,6 +218,8 @@ export async function processReferralRewards(userId: string): Promise<number> {
     referralCount: invitations.length,
     cashBalance: increment(reward),
     seasonCash: increment(reward),
+    weeklyCash: increment(reward),
+    monthlyCash: increment(reward),
   });
   await logTransaction(userId, 'credit', reward, `Referral reward for ${diff} new friends`);
   return reward;
@@ -219,8 +236,10 @@ export async function getSeasonLeaderboard(seasonId: string, count = 50): Promis
       userId: d.id,
       username: data.odl_username || data.odl_first_name || d.id.slice(-8),
       cash: data.seasonCash || 0,
+      seasonCash: data.seasonCash || 0,
       gamesPlayed: data.gamesPlayed || 0,
       vipTier: data.vipTier || 0,
+      isPremium: data.isPremium || false,
       rank: i + 1,
     };
   });
@@ -235,8 +254,46 @@ export async function getAllTimeLeaderboard(count = 50): Promise<LeaderboardEntr
       userId: d.id,
       username: data.odl_username || data.odl_first_name || d.id.slice(-8),
       cash: data.cashBalance || 0,
+      seasonCash: data.seasonCash || 0,
       gamesPlayed: data.gamesPlayed || 0,
       vipTier: data.vipTier || 0,
+      isPremium: data.isPremium || false,
+      rank: i + 1,
+    };
+  });
+}
+
+export async function getWeeklyLeaderboard(count = 50): Promise<LeaderboardEntry[]> {
+  const q = query(collection(db, 'users'), orderBy('weeklyCash', 'desc'), limit(count));
+  const snap = await getDocs(q);
+  return snap.docs.map((d, i) => {
+    const data = d.data();
+    return {
+      userId: d.id,
+      username: data.odl_username || data.odl_first_name || d.id.slice(-8),
+      cash: data.weeklyCash || 0,
+      seasonCash: data.seasonCash || 0,
+      gamesPlayed: data.gamesPlayed || 0,
+      vipTier: data.vipTier || 0,
+      isPremium: data.isPremium || false,
+      rank: i + 1,
+    };
+  });
+}
+
+export async function getMonthlyLeaderboard(count = 50): Promise<LeaderboardEntry[]> {
+  const q = query(collection(db, 'users'), orderBy('monthlyCash', 'desc'), limit(count));
+  const snap = await getDocs(q);
+  return snap.docs.map((d, i) => {
+    const data = d.data();
+    return {
+      userId: d.id,
+      username: data.odl_username || data.odl_first_name || d.id.slice(-8),
+      cash: data.monthlyCash || 0,
+      seasonCash: data.seasonCash || 0,
+      gamesPlayed: data.gamesPlayed || 0,
+      vipTier: data.vipTier || 0,
+      isPremium: data.isPremium || false,
       rank: i + 1,
     };
   });
@@ -295,6 +352,7 @@ export async function activateVip(userId: string, tier: number, durationDays: nu
     vipTier: tier,
     vipExpiresAt: expiresAt,
     cooldownResets: increment(cooldownItems),
+    isPremium: true,
   });
   await addDoc(collection(db, 'vipPurchases'), {
     userId,

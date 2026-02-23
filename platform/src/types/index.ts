@@ -18,6 +18,11 @@ export interface UserData {
   cooldownResets: number;
   vipTier: number; // 0=Free, 1=Bronze, 2=Silver, 3=Gold
   vipExpiresAt: Timestamp | null;
+  isPremium: boolean; // true if user has ever purchased anything
+  weeklyCash: number;
+  monthlyCash: number;
+  weeklyResetAt: Timestamp | null;
+  monthlyResetAt: Timestamp | null;
   dailyRewardDay: number;
   lastDailyReward: Timestamp | null;
   completedTasks: string[];
@@ -129,8 +134,10 @@ export interface LeaderboardEntry {
   userId: string;
   username: string;
   cash: number;
+  seasonCash: number;
   gamesPlayed: number;
   vipTier: number;
+  isPremium: boolean;
   rank?: number;
 }
 

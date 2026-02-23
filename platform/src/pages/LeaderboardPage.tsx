@@ -1,28 +1,67 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useUser } from '@/context/UserContext';
-import { getSeasonLeaderboard, getAllTimeLeaderboard } from '@/services/firestore';
+import { getWeeklyLeaderboard, getMonthlyLeaderboard } from '@/services/firestore';
 import { getUserLeague } from '@/config/leagues';
-import { SEASON_PRIZES } from '@/config/constants';
-import type { LeaderboardEntry } from '@/types';
-import { FaTrophy, FaMedal, FaCrown, FaFire } from 'react-icons/fa';
+import { WEEKLY_PRIZES, MONTHLY_PRIZES } from '@/config/constants';
+import type { LeaderboardEntry, PrizeTier } from '@/types';
+import { FaTrophy, FaMedal, FaCrown, FaFire, FaLock, FaStar } from 'react-icons/fa';
 
 const RANK_ICONS = [FaCrown, FaMedal, FaMedal];
 const RANK_COLORS = ['text-cyber-gold', 'text-gray-300', 'text-amber-600'];
 
+function getNextSundayMidnight(): Date {
+  const now = new Date();
+  const daysUntilSunday = (7 - now.getDay()) % 7 || 7;
+  const next = new Date(now);
+  next.setDate(now.getDate() + daysUntilSunday);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+function getNextMonthStart(): Date {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth() + 1, 1);
+}
+
+function formatTimeLeft(target: Date): string {
+  const diff = target.getTime() - Date.now();
+  if (diff <= 0) return 'Resetting...';
+  const d = Math.floor(diff / 86400000);
+  const h = Math.floor((diff % 86400000) / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  if (d > 0) return `${d}d ${h}h left`;
+  return `${h}h ${m}m left`;
+}
+
 export default function LeaderboardPage() {
-  const { user, userId, season } = useUser();
-  const [tab, setTab] = useState<'season' | 'alltime'>('season');
+  const { user, userId } = useUser();
+  const [tab, setTab] = useState<'weekly' | 'monthly'>('weekly');
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [timeLeft, setTimeLeft] = useState('');
+
+  const prizes = tab === 'weekly' ? WEEKLY_PRIZES : MONTHLY_PRIZES;
+  const isPremium = user?.isPremium || false;
+
+  // Countdown timer
+  useEffect(() => {
+    const update = () => {
+      const target = tab === 'weekly' ? getNextSundayMidnight() : getNextMonthStart();
+      setTimeLeft(formatTimeLeft(target));
+    };
+    update();
+    const interval = setInterval(update, 60000);
+    return () => clearInterval(interval);
+  }, [tab]);
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
-        const data = tab === 'season' && season
-          ? await getSeasonLeaderboard(season.id, 50)
-          : await getAllTimeLeaderboard(50);
+        const data = tab === 'weekly'
+          ? await getWeeklyLeaderboard(50)
+          : await getMonthlyLeaderboard(50);
         setEntries(data);
       } catch {
         setEntries([]);
@@ -30,19 +69,23 @@ export default function LeaderboardPage() {
       setLoading(false);
     };
     load();
-  }, [tab, season]);
+  }, [tab]);
 
   const getUserRank = () => {
     const idx = entries.findIndex(e => e.userId === userId);
     return idx >= 0 ? idx + 1 : null;
   };
 
-  const getPrize = (rank: number): number => {
-    const tier = SEASON_PRIZES.find(p => rank >= p.rankStart && rank <= p.rankEnd);
+  const getPrize = (rank: number, prizeTiers: PrizeTier[]): number => {
+    const tier = prizeTiers.find(p => rank >= p.rankStart && rank <= p.rankEnd);
     return tier?.prize || 0;
   };
 
   const myRank = getUserRank();
+
+  // Monthly rewards: only premium players eligible
+  // Weekly rewards: all players eligible
+  const canWinRewards = tab === 'weekly' ? true : isPremium;
 
   return (
     <div className="px-4 pb-28 space-y-5">
@@ -55,14 +98,14 @@ export default function LeaderboardPage() {
           <FaTrophy className="text-cyber-gold" />
           Leaderboard
         </h1>
-        {season && tab === 'season' && (
-          <p className="text-[10px] text-gray-500 mt-1">{season.name}</p>
-        )}
+        <p className="text-[10px] text-gray-500 mt-1">
+          {tab === 'weekly' ? 'Resets every Sunday' : 'Resets every 1st of the month'} &bull; {timeLeft}
+        </p>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-2">
-        {(['season', 'alltime'] as const).map(t => (
+        {(['weekly', 'monthly'] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -72,10 +115,36 @@ export default function LeaderboardPage() {
                 : 'bg-cyber-dark/50 text-gray-500 border border-gray-700/30'
             }`}
           >
-            {t === 'season' ? 'Season' : 'All Time'}
+            {t === 'weekly' ? '🏆 Weekly' : '👑 Monthly'}
           </button>
         ))}
       </div>
+
+      {/* Monthly premium notice */}
+      {tab === 'monthly' && !isPremium && (
+        <motion.div
+          initial={{ y: -5, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="glass-card p-3 border border-cyber-pink/30 flex items-center gap-3"
+        >
+          <FaLock className="text-cyber-pink flex-shrink-0" />
+          <div>
+            <p className="text-[11px] text-cyber-pink font-orbitron">Premium Only Rewards</p>
+            <p className="text-[10px] text-gray-500">
+              Purchase any item from the Shop to unlock monthly leaderboard rewards
+            </p>
+          </div>
+        </motion.div>
+      )}
+
+      {tab === 'weekly' && (
+        <div className="glass-card p-3 border border-green-500/20 flex items-center gap-3">
+          <FaStar className="text-green-400 flex-shrink-0" />
+          <p className="text-[10px] text-gray-400">
+            All players are eligible for weekly rewards!
+          </p>
+        </div>
+      )}
 
       {/* My rank card */}
       {myRank && user && (
@@ -90,32 +159,48 @@ export default function LeaderboardPage() {
             </div>
             <div className="flex-1">
               <p className="font-orbitron text-xs text-white">You</p>
-              <p className="text-[10px] text-gray-500 flex items-center gap-1"><img src={getUserLeague(user.cashBalance).image} alt="" className="w-3 h-3 inline object-contain" /> {getUserLeague(user.cashBalance).name}</p>
+              <p className="text-[10px] text-gray-500 flex items-center gap-1">
+                <img src={getUserLeague(user.seasonCash).image} alt="" className="w-3 h-3 inline object-contain" />
+                {getUserLeague(user.seasonCash).name}
+                {isPremium && <span className="text-cyber-gold ml-1">★ Premium</span>}
+              </p>
             </div>
             <div className="text-right">
               <p className="font-orbitron text-sm text-cyber-gold">
-                {(tab === 'season' ? user.seasonCash : user.cashBalance).toLocaleString()}
+                {(tab === 'weekly' ? (user.weeklyCash || 0) : (user.monthlyCash || 0)).toLocaleString()}
               </p>
               <p className="text-[10px] text-gray-500">CASH</p>
             </div>
           </div>
+          {!canWinRewards && (
+            <p className="text-[10px] text-cyber-pink mt-2 flex items-center gap-1">
+              <FaLock className="text-[8px]" /> Upgrade to premium to win monthly rewards
+            </p>
+          )}
         </motion.div>
       )}
 
-      {/* Prize pool (season tab) */}
-      {tab === 'season' && (
-        <div className="glass-card p-4">
-          <h3 className="font-orbitron text-[10px] text-gray-500 tracking-widest mb-3">PRIZE POOL (TOKENS)</h3>
-          <div className="grid grid-cols-5 gap-2 text-center">
-            {SEASON_PRIZES.slice(0, 5).map((tier, i) => (
-              <div key={i} className="space-y-1">
-                <p className="text-[10px] text-gray-500">#{tier.rankStart}</p>
-                <p className="font-orbitron text-xs text-cyber-gold">{tier.prize}</p>
-              </div>
-            ))}
-          </div>
+      {/* Prize pool */}
+      <div className="glass-card p-4">
+        <h3 className="font-orbitron text-[10px] text-gray-500 tracking-widest mb-3">
+          {tab === 'weekly' ? 'WEEKLY' : 'MONTHLY'} PRIZE POOL (TOKENS)
+        </h3>
+        <div className="grid grid-cols-5 gap-2 text-center">
+          {prizes.slice(0, 5).map((tier, i) => (
+            <div key={i} className="space-y-1">
+              <p className="text-[10px] text-gray-500">
+                {tier.rankStart === tier.rankEnd ? `#${tier.rankStart}` : `#${tier.rankStart}-${tier.rankEnd}`}
+              </p>
+              <p className="font-orbitron text-xs text-cyber-gold">{tier.prize}</p>
+            </div>
+          ))}
         </div>
-      )}
+        {tab === 'monthly' && (
+          <p className="text-[9px] text-cyber-pink mt-2 text-center">
+            * Monthly rewards are only for premium (paid) players
+          </p>
+        )}
+      </div>
 
       {/* Leaderboard list */}
       {loading ? (
@@ -129,9 +214,11 @@ export default function LeaderboardPage() {
           {entries.map((entry, idx) => {
             const rank = idx + 1;
             const isMe = entry.userId === userId;
-            const league = getUserLeague(entry.cash);
+            const league = getUserLeague(entry.seasonCash);
             const RankIcon = rank <= 3 ? RANK_ICONS[rank - 1] : null;
-            const prize = tab === 'season' ? getPrize(rank) : 0;
+            const prize = getPrize(rank, prizes);
+            // Monthly: only premium players get rewards
+            const getsReward = tab === 'weekly' ? prize > 0 : (prize > 0 && entry.isPremium);
 
             return (
               <motion.div
@@ -159,6 +246,9 @@ export default function LeaderboardPage() {
                     <p className={`font-orbitron text-xs truncate ${isMe ? 'text-cyber-cyan' : 'text-white'}`}>
                       {entry.username || entry.userId.slice(-8)}
                     </p>
+                    {entry.isPremium && (
+                      <span className="text-cyber-gold text-[8px]">★</span>
+                    )}
                   </div>
                   {entry.gamesPlayed > 0 && (
                     <p className="text-[10px] text-gray-600">{entry.gamesPlayed} games</p>
@@ -168,11 +258,15 @@ export default function LeaderboardPage() {
                 {/* Score */}
                 <div className="text-right flex-shrink-0">
                   <p className="font-orbitron text-xs text-white">{entry.cash.toLocaleString()}</p>
-                  {prize > 0 && (
+                  {getsReward ? (
                     <p className="text-[10px] text-cyber-gold flex items-center justify-end gap-1">
                       <FaFire className="text-[8px]" /> {prize} TKN
                     </p>
-                  )}
+                  ) : (tab === 'monthly' && prize > 0 && !entry.isPremium) ? (
+                    <p className="text-[10px] text-gray-600 flex items-center justify-end gap-1">
+                      <FaLock className="text-[8px]" /> {prize} TKN
+                    </p>
+                  ) : null}
                 </div>
               </motion.div>
             );

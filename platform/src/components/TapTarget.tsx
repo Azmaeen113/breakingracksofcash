@@ -44,18 +44,12 @@ export default function TapTarget() {
     await refreshUser();
   }, [userId, tapDamage, refreshUser]);
 
-  const handleTap = (e: React.MouseEvent | React.TouchEvent) => {
+  const handleTap = (e: React.PointerEvent) => {
     if (isOnCooldown) return;
 
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    let x: number, y: number;
-    if ('touches' in e) {
-      x = e.touches[0].clientX - rect.left;
-      y = e.touches[0].clientY - rect.top;
-    } else {
-      x = e.clientX - rect.left;
-      y = e.clientY - rect.top;
-    }
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
 
     // Add float text
     const id = nextId.current++;
@@ -92,7 +86,7 @@ export default function TapTarget() {
       <div className="relative">
         <motion.button
           whileTap={{ scale: 0.92, rotateX: 10, rotateY: -5 }}
-          onClick={handleTap}
+          onPointerDown={handleTap}
           disabled={isOnCooldown}
           className="relative w-40 h-40 rounded-full flex items-center justify-center border-2 border-cyber-cyan/40 glow-cyan bg-cyber-mid disabled:opacity-40 disabled:border-gray-700"
           style={{ perspective: 500 }}
