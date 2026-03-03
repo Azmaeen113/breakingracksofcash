@@ -5,6 +5,14 @@ import { getUserLeague } from '@/config/leagues';
 import { getVipMultiplier, getTapDamage } from '@/config/vipPlans';
 import type { League } from '@/types';
 
+interface TelegramUser {
+  id: number;
+  first_name: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
+}
+
 interface UserContextValue {
   user: UserData | null;
   userId: string;
@@ -13,6 +21,7 @@ interface UserContextValue {
   vipMultiplier: number;
   tapDamage: number;
   season: SeasonData | null;
+  telegramUser: TelegramUser | null;
   refreshUser: () => Promise<void>;
   setUser: React.Dispatch<React.SetStateAction<UserData | null>>;
   onboarded: boolean;
@@ -27,8 +36,23 @@ export function useUser(): UserContextValue {
   return ctx;
 }
 
-// Generate or retrieve a persistent anonymous user ID
+// Get Telegram user from Telegram WebApp SDK
+function getTelegramUser(): TelegramUser | null {
+  try {
+    const tg = (window as any).Telegram?.WebApp;
+    if (tg?.initDataUnsafe?.user) {
+      return tg.initDataUnsafe.user as TelegramUser;
+    }
+  } catch {}
+  return null;
+}
+
+// Get user ID: Telegram ID if available, otherwise generate anonymous
 function getOrCreateUserId(): string {
+  const tgUser = getTelegramUser();
+  if (tgUser?.id) {
+    return String(tgUser.id);
+  }
   let id = localStorage.getItem('br4c_userId');
   if (!id) {
     id = 'anon_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -42,16 +66,19 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [season, setSeason] = useState<SeasonData | null>(null);
   const [onboarded, setOnboarded] = useState(() => localStorage.getItem('br4c_onboarded') === '1');
+  const telegramUser = useRef(getTelegramUser()).current;
   const userId = useRef(getOrCreateUserId()).current;
 
   const refreshUser = useCallback(async () => {
     try {
       let userData = await getUser(userId);
       if (!userData) {
+        const tgUser = getTelegramUser();
         await createUser(userId, {
           odl_id: userId,
-          odl_first_name: 'Player',
-          odl_username: 'player_' + userId.slice(-6),
+          odl_first_name: tgUser?.first_name || 'Player',
+          odl_username: tgUser?.username || ('player_' + userId.slice(-6)),
+          photoUrl: tgUser?.photo_url || null,
         });
         userData = await getUser(userId);
       }
@@ -76,6 +103,17 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   }, [userId]);
 
+  // Initialize Telegram WebApp
+  useEffect(() => {
+    try {
+      const tg = (window as any).Telegram?.WebApp;
+      if (tg) {
+        tg.ready();
+        tg.expand();
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
     refreshUser();
     getActiveSeason().then(setSeason).catch(() => setSeason(null));
@@ -91,7 +129,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const tapDamage = getTapDamage(user?.vipTier ?? 0);
 
   return (
-    <UserContext.Provider value={{ user, userId, loading, league, vipMultiplier, tapDamage, season, refreshUser, setUser, onboarded, setOnboarded: handleSetOnboarded }}>
+    <UserContext.Provider value={{ user, userId, loading, league, vipMultiplier, tapDamage, season, telegramUser, refreshUser, setUser, onboarded, setOnboarded: handleSetOnboarded }}>
       {children}
     </UserContext.Provider>
   );

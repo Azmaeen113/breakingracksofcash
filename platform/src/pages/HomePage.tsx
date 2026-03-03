@@ -5,7 +5,7 @@ import { useUser } from '@/context/UserContext';
 import TapTarget from '@/components/TapTarget';
 import DailyRewardModal from '@/components/DailyRewardModal';
 import LeagueSlider from '@/components/LeagueSlider';
-import { FaPlay, FaGift, FaBolt, FaCoins, FaGem } from 'react-icons/fa';
+import { FaPlay, FaGift, FaBolt, FaCoins, FaGem, FaClock } from 'react-icons/fa';
 
 export default function HomePage() {
   const { user, league, vipMultiplier } = useUser();
@@ -53,7 +53,7 @@ export default function HomePage() {
         </div>
       </motion.div>
 
-      {/* Energy + Play */}
+      {/* Energy + Game Modes */}
       <div className="w-full flex gap-3">
         {/* Energy card */}
         <motion.div
@@ -67,7 +67,7 @@ export default function HomePage() {
           <p className="text-[10px] text-gray-500">ENERGY</p>
         </motion.div>
 
-        {/* Play button */}
+        {/* Play vs Computer button */}
         <motion.button
           initial={{ x: 20, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
@@ -81,6 +81,26 @@ export default function HomePage() {
           <span>PLAY</span>
         </motion.button>
       </div>
+
+      {/* Rack Attack Mode */}
+      <motion.button
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.25 }}
+        whileTap={{ scale: 0.97 }}
+        onClick={() => navigate('/game?mode=rackattack')}
+        disabled={user.gameEnergy <= 0}
+        className="w-full glass-card p-4 flex items-center gap-4 border border-cyber-pink/30 disabled:opacity-30"
+      >
+        <div className="w-12 h-12 rounded-xl bg-cyber-pink/10 flex items-center justify-center">
+          <FaClock className="text-cyber-pink text-xl" />
+        </div>
+        <div className="flex-1 text-left">
+          <p className="font-orbitron text-xs text-cyber-pink">RACK ATTACK</p>
+          <p className="text-[10px] text-gray-500">90 seconds — Pot as many balls as you can!</p>
+        </div>
+        <FaPlay className="text-cyber-pink text-sm" />
+      </motion.button>
 
       {/* Daily Reward CTA */}
       {canClaimDaily && (

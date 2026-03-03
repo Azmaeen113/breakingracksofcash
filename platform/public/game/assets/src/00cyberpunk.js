@@ -184,6 +184,128 @@ loadState.init = function() {
   }
 };
 
+// ─── Rack Attack Mode Detection ───
+var RACK_ATTACK = (function() {
+  try {
+    var params = new URLSearchParams(window.location.search);
+    return params.get('mode') === 'rackattack';
+  } catch(e) { return false; }
+})();
+
+if (RACK_ATTACK) {
+  // Force mode=1 (single player) so the existing game engine works,
+  // but we override behaviour heavily below.
+  var _origMenuCreate2 = menuState.create;
+  menuState.create = function() {
+    _origMenuCreate2.call(this);
+    // Auto-start the game immediately – skip menu entirely
+    projectInfo.mode = 1;
+    projectInfo.levelName = 'rackattack';
+    projectInfo.tutorial = false;
+    projectInfo.lastBreaker = 'none';
+    game.state.start('play');
+  };
+
+  // ── 90-second countdown timer ──
+  var RA_TIME_LIMIT = 90;  // seconds
+  var raStartTime = 0;
+  var raTimerStarted = false;
+  var raGameEnded = false;
+
+  // Override startTimer to record the real clock start
+  window._origStartTimer = window.startTimer;
+  window.startTimer = function() {
+    raStartTime = Date.now();
+    raTimerStarted = true;
+    playState.gameInfo.time = 0;
+  };
+
+  // Override updateTimer to count DOWN from 90
+  window._origUpdateTimer = window.updateTimer;
+  window.updateTimer = function() {
+    if (!raTimerStarted || raGameEnded) return;
+    var gi = playState.gameInfo;
+    var elapsed = (Date.now() - raStartTime) / 1000;
+    var remaining = Math.max(0, Math.ceil(RA_TIME_LIMIT - elapsed));
+    var mins = Math.floor(remaining / 60);
+    var secs = remaining % 60;
+    var secStr = secs < 10 ? '0' + secs : '' + secs;
+    gi.timerText.text = mins + ':' + secStr;
+    // Store elapsed frames for compatibility
+    gi.time = Math.floor(elapsed * 60);
+
+    // Time's up!
+    if (remaining <= 0 && !raGameEnded) {
+      raGameEnded = true;
+      gi.gameOver = true;
+      gi.winner = 'p1'; // Player always "wins" in rack attack
+      gi.foulDisplayComplete = true;
+    }
+  };
+
+  // ── Keep turn locked to p1 & suppress fouls ──
+  var _origPlayCreate2 = playState.create;
+  playState.create = function() {
+    _origPlayCreate2.call(this);
+    var gi = this.gameInfo;
+    // Always player's turn, no target type restrictions
+    gi.turn = 'p1';
+    gi.p1TargetType = 'ANY';
+    gi.p2TargetType = 'ANY';
+    // Hide AI icon & second turn arrow
+    if (gi.aiIcon) gi.aiIcon.visible = false;
+    if (gi.turnArrow2) gi.turnArrow2.visible = false;
+    // Show timer in rack attack (mode=1 already shows it)
+    if (gi.timerText) {
+      gi.timerText.visible = true;
+      gi.timerText.text = '1:30';
+    }
+    // Reset rack attack state for replays
+    raTimerStarted = false;
+    raGameEnded = false;
+    raStartTime = 0;
+  };
+
+  // ── Override game-over panel to skip time/AI bonuses ──
+  // The original c() function adds time bonus and AI bonus.
+  // For rack attack, score is just balls potted * multiplier (already handled by awardBonuses).
+  // We override by hooking into FORCE_LOSE and intercepting the game-over flow.
+  // Actually, we let the existing game-over panel show but ensure:
+  // 1. No time bonus (remaining time is 0 by definition)
+  // 2. No AI level bonus
+  // We do this by setting projectInfo.aiRating = 0 and the time bonus calc yields 0.
+
+  var _origPlayUpdate = playState.update;
+  playState.update = function() {
+    _origPlayUpdate.call(this);
+    var gi = this.gameInfo;
+    if (!gi) return;
+
+    // Force turn back to p1 after every shot reset 
+    // (prevents turn switching to p2 / AI)
+    if (gi.turn === 'p2') {
+      gi.turn = 'p1';
+      if (gi.turnArrow1) gi.turnArrow1.frame = 1;
+      if (gi.turnArrow2) gi.turnArrow2.frame = 0;
+    }
+
+    // Suppress foul penalties in rack attack – auto-clear fouls
+    if (gi.fouled && gi.foulWindow && gi.foulWindow.visible) {
+      gi.foulWindow.visible = false;
+      gi.foulDisplayComplete = true;
+      gi.fouled = false;
+      gi.gameRunning = true;
+    }
+
+    // If cue ball was scratched, just reset it (ball in hand, no penalty)
+    if (gi.scratched) {
+      gi.cueBallInHand = true;
+      gi.scratched = false;
+      gi.fouled = false;
+    }
+  };
+}
+
 // ─── Score communication with parent platform ───
 (function() {
   // Send live score updates to parent
@@ -203,8 +325,18 @@ loadState.init = function() {
     if (gameOverSent) return;
     if (typeof playState === 'undefined' || !playState.gameInfo) return;
     var gi = playState.gameInfo;
-    // gameOver flag is set, but score is still being animated
-    // Wait until quit/replay buttons are visible (means all bonuses applied)
+
+    // For Rack Attack, send GAME_OVER as soon as game ends (no bonus wait)
+    if (RACK_ATTACK && gi.gameOver && !gameOverSent) {
+      gameOverSent = true;
+      var finalScore = (typeof projectInfo !== 'undefined') ? projectInfo.score : 0;
+      try {
+        window.parent.postMessage({ type: 'GAME_OVER', finalScore: finalScore }, '*');
+      } catch(e) {}
+      return;
+    }
+
+    // Normal mode: wait for quit/replay buttons (means all bonuses applied)
     if (gi.gameOver && gi.quitButton2 && gi.quitButton2.visible) {
       gameOverSent = true;
       var finalScore = (typeof projectInfo !== 'undefined') ? projectInfo.score : 0;

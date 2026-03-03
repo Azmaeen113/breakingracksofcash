@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useUser } from '@/context/UserContext';
 import { spendEnergy, addGameScore } from '@/services/firestore';
 import { FaHome } from 'react-icons/fa';
@@ -8,10 +8,16 @@ import toast from 'react-hot-toast';
 export default function GamePage() {
   const { user, userId, vipMultiplier, refreshUser } = useUser();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [gameEnded, setGameEnded] = useState(false);
   const gameEndedRef = useRef(false);
   const earnedRef = useRef(0);
+
+  const gameMode = searchParams.get('mode') || 'normal';
+  const iframeSrc = gameMode === 'rackattack'
+    ? '/game/index.html?mode=rackattack'
+    : '/game/index.html';
 
   // Spend energy in background — don't block game loading
   useEffect(() => {
@@ -84,7 +90,7 @@ export default function GamePage() {
       {/* Game iframe - full screen */}
       <iframe
         ref={iframeRef}
-        src="/game/index.html"
+        src={iframeSrc}
         className="flex-1 w-full border-0"
         title="Breaking Racks 4 Cash"
         allow="autoplay"

@@ -130,7 +130,7 @@ export default function WalletPage() {
             type="text"
             value={walletInput}
             onChange={e => setWalletInput(e.target.value)}
-            placeholder="Enter TON/EVM wallet address"
+            placeholder="Enter TON wallet address"
             className="w-full p-3 rounded-xl bg-cyber-dark border border-gray-700/50 text-white text-sm focus:border-cyber-cyan outline-none font-mono"
           />
           <button

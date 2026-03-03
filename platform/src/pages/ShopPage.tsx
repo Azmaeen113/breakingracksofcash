@@ -3,44 +3,65 @@ import { motion } from 'framer-motion';
 import { useUser } from '@/context/UserContext';
 import { VIP_PLANS, getVipMultiplier, getTapDamage } from '@/config/vipPlans';
 import { activateVip } from '@/services/firestore';
-import { COOLDOWN_RESET_REDUCTION_MS } from '@/config/constants';
+import { TON_RECEIVER_WALLET } from '@/config/constants';
 import { FaCrown, FaBolt, FaGamepad, FaTimes, FaCheck, FaShoppingCart, FaFire, FaStar } from 'react-icons/fa';
 import toast from 'react-hot-toast';
-
-type PaymentMethod = 'stripe' | 'ton' | 'evm';
 
 export default function ShopPage() {
   const { user, userId, refreshUser } = useUser();
   const [tab, setTab] = useState<'vip' | 'items'>('vip');
   const [selectedPlan, setSelectedPlan] = useState<typeof VIP_PLANS[0] | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
   const [processing, setProcessing] = useState(false);
 
   if (!user) return null;
 
   const handlePurchaseVip = async () => {
-    if (!selectedPlan || !paymentMethod) return;
+    if (!selectedPlan) return;
     setProcessing(true);
     try {
-      // In production, this would integrate with actual payment processors
-      // For now, we simulate the payment and activate VIP
-      if (paymentMethod === 'ton') {
-        toast('TON payment integration — connect wallet to proceed', { icon: '💎' });
-        // TODO: Integrate @tonconnect/ui-react
-      } else if (paymentMethod === 'evm') {
-        toast('EVM payment integration — connect wallet to proceed', { icon: '⛓️' });
-        // TODO: Integrate ethers.js + Web3Modal
+      // Use TonConnect for payment
+      const tonconnect = (window as any).__tonConnectUI;
+      if (tonconnect) {
+        // Calculate TON amount (approximate, could use price oracle)
+        const tonAmount = selectedPlan.priceUSD; // Simplified: 1 USD ≈ adjusted TON amount
+        try {
+          const tx = {
+            validUntil: Math.floor(Date.now() / 1000) + 600,
+            messages: [
+              {
+                address: TON_RECEIVER_WALLET,
+                amount: String(Math.floor(tonAmount * 1e9)), // nanoTON
+              },
+            ],
+          };
+          await tonconnect.sendTransaction(tx);
+          // Payment successful - activate VIP
+          await activateVip(userId, selectedPlan.tier, selectedPlan.durationDays);
+          await refreshUser();
+          toast.success(`VIP ${selectedPlan.name} activated!`);
+          setSelectedPlan(null);
+        } catch (txErr: any) {
+          if (txErr?.message?.includes('cancel')) {
+            toast.error('Transaction cancelled');
+          } else {
+            toast.error('Payment failed. Please try again.');
+          }
+        }
       } else {
-        toast('Stripe payment integration — redirecting...', { icon: '💳' });
-        // TODO: Integrate Stripe checkout
+        // Fallback: show TON wallet address for manual payment
+        try {
+          await navigator.clipboard.writeText(TON_RECEIVER_WALLET);
+          toast(`Send $${selectedPlan.priceUSD} worth of TON to the copied wallet address.\nWallet copied to clipboard!`, {
+            icon: '💎',
+            duration: 6000,
+          });
+        } catch {
+          toast(`Send $${selectedPlan.priceUSD} worth of TON to:\n${TON_RECEIVER_WALLET}`, {
+            icon: '💎',
+            duration: 8000,
+          });
+        }
       }
-
-      // Simulate successful payment for demo
-      await activateVip(userId, selectedPlan.tier, selectedPlan.durationDays);
-      await refreshUser();
-      toast.success(`VIP ${selectedPlan.name} activated!`);
-      setSelectedPlan(null);
-      setPaymentMethod(null);
     } catch (err) {
       toast.error('Purchase failed');
     }
@@ -73,9 +94,6 @@ export default function ShopPage() {
 
   return (
     <div className="px-4 pb-28 space-y-5">
-      {/* Banner */}
-      <img src="/images/banner.png" alt="Breaking Racks 4 Cash" className="w-full rounded-2xl object-contain" />
-
       {/* Header */}
       <div className="text-center pt-2">
         <h1 className="font-orbitron text-lg text-white flex items-center justify-center gap-2">
@@ -187,7 +205,7 @@ export default function ShopPage() {
                     </div>
                   ) : (
                     <button
-                      onClick={() => { setSelectedPlan(plan); setPaymentMethod(null); }}
+                      onClick={() => setSelectedPlan(plan)}
                       className="w-full py-3 rounded-xl font-orbitron text-xs font-bold bg-gradient-to-r from-cyber-pink to-cyber-purple text-white active:scale-95 transition-transform"
                     >
                       Purchase
@@ -251,15 +269,10 @@ export default function ShopPage() {
               +1
             </button>
           </motion.div>
-
-          {/* More items placeholder */}
-          <div className="glass-card p-6 text-center opacity-50">
-            <p className="text-xs text-gray-500">More items coming soon...</p>
-          </div>
         </div>
       )}
 
-      {/* Payment Method Modal */}
+      {/* Payment Modal - TON Only */}
       {selectedPlan && (
         <div className="fixed inset-0 z-[80] bg-black/80 flex items-center justify-center p-4" onClick={() => setSelectedPlan(null)}>
           <motion.div
@@ -269,43 +282,24 @@ export default function ShopPage() {
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h3 className="font-orbitron text-sm text-white">Choose Payment</h3>
+              <h3 className="font-orbitron text-sm text-white">Pay with TON</h3>
               <button onClick={() => setSelectedPlan(null)} className="text-gray-500"><FaTimes /></button>
             </div>
 
             <div className="text-center">
-              <p className="text-xs text-gray-500">{selectedPlan.name} VIP</p>
+              <p className="text-xs text-gray-500">{selectedPlan.name} VIP — {selectedPlan.durationDays} days</p>
               <p className="font-orbitron text-2xl text-white">${selectedPlan.priceUSD}</p>
             </div>
 
-            <div className="space-y-3">
-              {([
-                { id: 'stripe', label: 'Card (Stripe)', icon: '💳', desc: 'Visa, Mastercard' },
-                { id: 'ton', label: 'TON Wallet', icon: '💎', desc: 'Pay with TON' },
-                { id: 'evm', label: 'EVM Wallet', icon: '⛓️', desc: 'ETH, USDT, BNB' },
-              ] as const).map(m => (
-                <button
-                  key={m.id}
-                  onClick={() => setPaymentMethod(m.id)}
-                  className={`w-full p-4 rounded-xl flex items-center gap-4 transition-all ${
-                    paymentMethod === m.id
-                      ? 'bg-cyber-cyan/10 border border-cyber-cyan/30'
-                      : 'bg-cyber-dark border border-gray-700/30'
-                  }`}
-                >
-                  <span className="text-2xl">{m.icon}</span>
-                  <div className="text-left">
-                    <p className="text-xs text-white">{m.label}</p>
-                    <p className="text-[10px] text-gray-500">{m.desc}</p>
-                  </div>
-                  {paymentMethod === m.id && <FaCheck className="text-cyber-cyan ml-auto" />}
-                </button>
-              ))}
+            <div className="p-4 rounded-xl bg-cyber-dark border border-cyber-cyan/20 text-center space-y-2">
+              <span className="text-3xl">💎</span>
+              <p className="text-xs text-white">TON Wallet Payment</p>
+              <p className="text-[10px] text-gray-500">Send payment via TON to activate VIP</p>
             </div>
 
             <button
               onClick={handlePurchaseVip}
-              disabled={!paymentMethod || processing}
+              disabled={processing}
               className="w-full py-3 rounded-xl font-orbitron text-sm font-bold bg-gradient-to-r from-cyber-pink to-cyber-purple text-white disabled:opacity-30 active:scale-95 transition-transform"
             >
               {processing ? 'Processing...' : 'Pay Now'}

@@ -14,8 +14,12 @@ export default function TapTarget() {
   const batchRef = useRef(0);
   const flushTimer = useRef<ReturnType<typeof setTimeout>>();
   const nextId = useRef(0);
+  const isFlushing = useRef(false);
 
-  const progress = user ? Math.min(100, ((user.tapCycleProgress + localTaps * tapDamage) / TAP_CYCLE_TOTAL) * 100) : 0;
+  // Track server-side progress + local un-flushed taps
+  const serverProgress = user?.tapCycleProgress ?? 0;
+  const totalProgress = serverProgress + localTaps * tapDamage;
+  const progress = Math.min(100, (totalProgress / TAP_CYCLE_TOTAL) * 100);
   const isOnCooldown = user?.tapCooldownUntil ? Date.now() < user.tapCooldownUntil : false;
 
   // Cooldown timer
@@ -36,12 +40,19 @@ export default function TapTarget() {
 
   // Flush batch to Firebase
   const flushBatch = useCallback(async () => {
-    if (batchRef.current === 0) return;
+    if (batchRef.current === 0 || isFlushing.current) return;
+    isFlushing.current = true;
     const taps = batchRef.current;
     batchRef.current = 0;
+    try {
+      await processTapBatch(userId, taps, tapDamage);
+      await refreshUser();
+    } catch (err) {
+      console.error('Tap flush error:', err);
+    }
+    // Only reset localTaps after successful flush and refresh
     setLocalTaps(0);
-    await processTapBatch(userId, taps, tapDamage);
-    await refreshUser();
+    isFlushing.current = false;
   }, [userId, tapDamage, refreshUser]);
 
   const handleTap = (e: React.PointerEvent) => {
@@ -56,21 +67,33 @@ export default function TapTarget() {
     setFloats(prev => [...prev.slice(-8), { id, x, y }]);
     setTimeout(() => setFloats(prev => prev.filter(f => f.id !== id)), 1000);
 
-    // Increment local
+    // Increment local counter
     batchRef.current += 1;
     setLocalTaps(prev => prev + 1);
 
-    // Debounce flush
+    // Debounce flush - wait 800ms after last tap
     clearTimeout(flushTimer.current);
-    flushTimer.current = setTimeout(flushBatch, 500);
+    flushTimer.current = setTimeout(flushBatch, 800);
   };
+
+  // Flush on unmount
+  useEffect(() => {
+    return () => {
+      clearTimeout(flushTimer.current);
+      if (batchRef.current > 0) {
+        const taps = batchRef.current;
+        batchRef.current = 0;
+        processTapBatch(userId, taps, tapDamage).catch(() => {});
+      }
+    };
+  }, [userId, tapDamage]);
 
   return (
     <div className="flex flex-col items-center space-y-4">
       {/* Progress bar */}
       <div className="w-full max-w-xs">
         <div className="flex justify-between text-[10px] text-gray-500 mb-1">
-          <span>{Math.floor((user?.tapCycleProgress ?? 0) + localTaps * tapDamage)} / {TAP_CYCLE_TOTAL}</span>
+          <span>{Math.floor(totalProgress)} / {TAP_CYCLE_TOTAL}</span>
           <span>{tapDamage}x speed</span>
         </div>
         <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden">

@@ -1,14 +1,17 @@
 import type { DailyReward, PrizeTier } from '@/types';
 
 export const DAILY_REWARDS: DailyReward[] = [
-  { day: 1, reward: 100 },
-  { day: 2, reward: 200 },
-  { day: 3, reward: 300 },
-  { day: 4, reward: 400 },
-  { day: 5, reward: 500 },
-  { day: 6, reward: 600 },
-  { day: 7, reward: 10000 },
+  { day: 1, reward: 50 },
+  { day: 2, reward: 100 },
+  { day: 3, reward: 150 },
+  { day: 4, reward: 200 },
+  { day: 5, reward: 250 },
+  { day: 6, reward: 350 },
+  { day: 7, reward: 500 },
 ];
+
+// TON receiver wallet for all payments
+export const TON_RECEIVER_WALLET = 'UQCbRCf4OS6zeo3HtwVlq9Sg6ahV72Ux4WqlPpcYLpNlUcyl';
 
 export const SEASON_PRIZES: PrizeTier[] = [
   { rankStart: 1,  rankEnd: 1,  prize: 1000 },

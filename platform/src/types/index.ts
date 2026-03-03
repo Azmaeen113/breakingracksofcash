@@ -5,6 +5,7 @@ export interface UserData {
   odl_id: string;
   odl_first_name: string;
   odl_username: string;
+  photoUrl?: string | null;
   cashBalance: number;
   tokenBalance: number;
   seasonCash: number;
