@@ -193,12 +193,11 @@ var RACK_ATTACK = (function() {
 })();
 
 if (RACK_ATTACK) {
-  // Force mode=1 (single player) so the existing game engine works,
-  // but we override behaviour heavily below.
+
+  // ── Skip menu: auto-start game ──
   var _origMenuCreate2 = menuState.create;
   menuState.create = function() {
     _origMenuCreate2.call(this);
-    // Auto-start the game immediately – skip menu entirely
     projectInfo.mode = 1;
     projectInfo.levelName = 'rackattack';
     projectInfo.tutorial = false;
@@ -207,12 +206,11 @@ if (RACK_ATTACK) {
   };
 
   // ── 90-second countdown timer ──
-  var RA_TIME_LIMIT = 90;  // seconds
+  var RA_TIME_LIMIT = 90;
   var raStartTime = 0;
   var raTimerStarted = false;
   var raGameEnded = false;
 
-  // Override startTimer to record the real clock start
   window._origStartTimer = window.startTimer;
   window.startTimer = function() {
     raStartTime = Date.now();
@@ -220,7 +218,6 @@ if (RACK_ATTACK) {
     playState.gameInfo.time = 0;
   };
 
-  // Override updateTimer to count DOWN from 90
   window._origUpdateTimer = window.updateTimer;
   window.updateTimer = function() {
     if (!raTimerStarted || raGameEnded) return;
@@ -229,120 +226,196 @@ if (RACK_ATTACK) {
     var remaining = Math.max(0, Math.ceil(RA_TIME_LIMIT - elapsed));
     var mins = Math.floor(remaining / 60);
     var secs = remaining % 60;
-    var secStr = secs < 10 ? '0' + secs : '' + secs;
-    gi.timerText.text = mins + ':' + secStr;
-    // Store elapsed frames for compatibility
+    gi.timerText.text = mins + ':' + (secs < 10 ? '0' : '') + secs;
     gi.time = Math.floor(elapsed * 60);
-
-    // Time's up!
     if (remaining <= 0 && !raGameEnded) {
       raGameEnded = true;
       gi.gameOver = true;
-      gi.winner = 'p1'; // Player always "wins" in rack attack
+      gi.winner = 'p1';
       gi.foulDisplayComplete = true;
     }
   };
 
-  // ── Keep turn locked to p1 & suppress fouls ──
+  // ── Override contact listener ──
+  // Prevent cue-ball scratch from setting fouled/scratched
+  // Prevent 8-ball pot from triggering immediate game-over
+  var _origOnContact = onContact;
+  onContact = function(evt) {
+    var gi = playState.gameInfo;
+    var ball = evt.ball;
+
+    // CUE BALL potted: no scratch, just ball-in-hand
+    if (evt.collisionType === 'pocket' && ball.id === 0) {
+      ball.active = false;
+      ball.velocity = new Vector2D(0, 0);
+      ball.contactArray.push({
+        position: ball.position,
+        targetPosition: evt.target.position,
+        velocity: evt.ballVelocity,
+        collisionType: 'pocket',
+        type: 'pocket'
+      });
+      if (!gi.trial) {
+        playPocketSound(evt);
+        playPocketAnimation(evt);
+      }
+      gi.cueBallInHand = true;
+      // Do NOT set o.scratched or call awardBonuses (which sets fouled)
+      return;
+    }
+
+    // 8-BALL potted: treat as a normal ball (award points, no game-over)
+    if (evt.collisionType === 'pocket' && ball.id === 8) {
+      ball.active = false;
+      ball.velocity = new Vector2D(0, 0);
+      ball.contactArray.push({
+        position: ball.position,
+        targetPosition: evt.target.position,
+        velocity: evt.ballVelocity,
+        collisionType: 'pocket',
+        type: 'pocket'
+      });
+      if (!gi.trial) {
+        playPocketSound(evt);
+        playPocketAnimation(evt);
+        // Award bonus manually (skipping the 8-ball game-over check in awardBonuses)
+        gi.numBalls--;
+        gi.pottedBallArray.push(ball.id);
+        checkLevelComplete();
+        gi.ballPotted = true;
+        if (projectInfo.mode === 1 && gi.turn === 'p1') {
+          var dp = evt.target.dropPosition;
+          createBonusText(0, String(10 * gi.multiplier), 'font6',
+            dp.x * gi.physScale, dp.y * gi.physScale, 56, false);
+          game.time.events.add(1.5 * Phaser.Timer.SECOND, function() {
+            projectInfo.score += 10 * gi.multiplier;
+            gi.multiplier++;
+            gi.multiplierText.text = 'x' + gi.multiplier;
+          }, this);
+        }
+      }
+      gi.ballsRemaining--;
+      return;
+    }
+
+    // Everything else: normal handling
+    _origOnContact(evt);
+  };
+
+  // ── Override playState.create: Rack Attack setup ──
   var _origPlayCreate2 = playState.create;
   playState.create = function() {
     _origPlayCreate2.call(this);
     var gi = this.gameInfo;
-    // Always player's turn, no target type restrictions
     gi.turn = 'p1';
     gi.p1TargetType = 'ANY';
     gi.p2TargetType = 'ANY';
-    // Hide AI icon & second turn arrow
     if (gi.aiIcon) gi.aiIcon.visible = false;
     if (gi.turnArrow2) gi.turnArrow2.visible = false;
-    // Show timer in rack attack (mode=1 already shows it)
-    if (gi.timerText) {
-      gi.timerText.visible = true;
-      gi.timerText.text = '1:30';
-    }
-    // Reset rack attack state for replays
+    if (gi.timerText) { gi.timerText.visible = true; gi.timerText.text = '1:30'; }
     raTimerStarted = false;
     raGameEnded = false;
     raStartTime = 0;
   };
 
-  // ── Override game-over panel to skip time/AI bonuses ──
-  // The original c() function adds time bonus and AI bonus.
-  // For rack attack, score is just balls potted * multiplier (already handled by awardBonuses).
-  // We override by hooking into FORCE_LOSE and intercepting the game-over flow.
-  // Actually, we let the existing game-over panel show but ensure:
-  // 1. No time bonus (remaining time is 0 by definition)
-  // 2. No AI level bonus
-  // We do this by setting projectInfo.aiRating = 0 and the time bonus calc yields 0.
-
+  // ── Override playState.update: suppress all fouls, lock turn to p1 ──
   var _origPlayUpdate = playState.update;
   playState.update = function() {
-    _origPlayUpdate.call(this);
     var gi = this.gameInfo;
+
+    // BEFORE original update: clear any scratch that might have slipped through
+    if (gi) {
+      gi.scratched = false;
+    }
+
+    // Run the original game update
+    _origPlayUpdate.call(this);
+
     if (!gi) return;
 
-    // Force turn back to p1 after every shot reset 
-    // (prevents turn switching to p2 / AI)
+    // ── AFTER original update: fix up any issues ──
+
+    // Force turn to p1 (the rulings may have switched it to p2)
     if (gi.turn === 'p2') {
       gi.turn = 'p1';
       if (gi.turnArrow1) gi.turnArrow1.frame = 1;
       if (gi.turnArrow2) gi.turnArrow2.frame = 0;
     }
 
-    // Suppress foul penalties in rack attack – auto-clear fouls
-    if (gi.fouled && gi.foulWindow && gi.foulWindow.visible) {
-      gi.foulWindow.visible = false;
-      gi.foulDisplayComplete = true;
+    // If a non-scratch foul was flagged (miss, cushion rule, etc.),
+    // dismiss the foul window AND properly reset the shot state.
+    // The original code schedules p() on a 5-second delay after the foul
+    // window hides; since we hide it immediately we must trigger the
+    // shot-reset ourselves by setting initVars=false so v() re-runs.
+    if (gi.fouled && !raGameEnded) {
       gi.fouled = false;
+      gi.scratched = false;
+      gi.cueBallInHand = true;
+      gi.rerack = false;
+
+      if (gi.foulWindow && gi.foulWindow.visible) {
+        gi.foulWindow.visible = false;
+        gi.foulWindow.alpha = 1;
+      }
+      gi.foulDisplayComplete = true;
       gi.gameRunning = true;
+
+      // Trigger a clean shot-reset on the NEXT frame:
+      // initVars=false causes the engine's own v() to run internally
+      gi.shotReset = true;
+      gi.initVars = false;
+      gi.shotComplete = false;
+      gi.shotRunning = false;
+      gi.beginStrike = false;
+      gi.settingPower = false;
+      gi.executeStrike = false;
+      gi.cueTweenComplete = false;
     }
 
-    // If cue ball was scratched, just reset it (ball in hand, no penalty)
-    if (gi.scratched) {
-      gi.cueBallInHand = true;
-      gi.scratched = false;
-      gi.fouled = false;
+    // Safety: if foulDisplayComplete got stuck false, unstick it
+    if (!gi.foulDisplayComplete && gi.foulWindow && !gi.foulWindow.visible && !gi.gameOver) {
+      gi.foulDisplayComplete = true;
+    }
+
+    // Only the 90-s timer should cause game-over; cancel anything else
+    if (gi.gameOver && !raGameEnded) {
+      gi.gameOver = false;
+      gi.winner = undefined;
+      gi.gameRunning = true;
+      gi.foulDisplayComplete = true;
+      if (gi.gameOverPanel) gi.gameOverPanel.visible = false;
+      if (gi.cueBaseCanvas) gi.cueBaseCanvas.visible = true;
+      if (gi.guideCanvas) gi.guideCanvas.visible = true;
+      gi.shotReset = true;
+      gi.initVars = false;
+      gi.shotComplete = false;
     }
   };
 }
 
 // ─── Score communication with parent platform ───
 (function() {
-  // Send live score updates to parent
   var lastScore = 0;
   setInterval(function() {
     if (typeof projectInfo !== 'undefined' && projectInfo.score !== lastScore) {
       lastScore = projectInfo.score;
-      try {
-        window.parent.postMessage({ type: 'GAME_SCORE_UPDATE', score: lastScore }, '*');
-      } catch(e) {}
+      try { window.parent.postMessage({ type: 'GAME_SCORE_UPDATE', score: lastScore }, '*'); } catch(e) {}
     }
   }, 1000);
 
-  // Detect game over and wait for final score (time + AI bonuses are added over ~6s)
   var gameOverSent = false;
   setInterval(function() {
     if (gameOverSent) return;
     if (typeof playState === 'undefined' || !playState.gameInfo) return;
     var gi = playState.gameInfo;
-
-    // For Rack Attack, send GAME_OVER as soon as game ends (no bonus wait)
     if (RACK_ATTACK && gi.gameOver && !gameOverSent) {
       gameOverSent = true;
-      var finalScore = (typeof projectInfo !== 'undefined') ? projectInfo.score : 0;
-      try {
-        window.parent.postMessage({ type: 'GAME_OVER', finalScore: finalScore }, '*');
-      } catch(e) {}
+      try { window.parent.postMessage({ type: 'GAME_OVER', finalScore: projectInfo.score || 0 }, '*'); } catch(e) {}
       return;
     }
-
-    // Normal mode: wait for quit/replay buttons (means all bonuses applied)
     if (gi.gameOver && gi.quitButton2 && gi.quitButton2.visible) {
       gameOverSent = true;
-      var finalScore = (typeof projectInfo !== 'undefined') ? projectInfo.score : 0;
-      try {
-        window.parent.postMessage({ type: 'GAME_OVER', finalScore: finalScore }, '*');
-      } catch(e) {}
+      try { window.parent.postMessage({ type: 'GAME_OVER', finalScore: projectInfo.score || 0 }, '*'); } catch(e) {}
     }
   }, 500);
 })();
