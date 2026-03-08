@@ -236,11 +236,13 @@ if (RACK_ATTACK) {
     }
   };
 
-  // ── Override contact listener ──
-  // Prevent cue-ball scratch from setting fouled/scratched
-  // Prevent 8-ball pot from triggering immediate game-over
+  // ── Custom contact handler for Rack Attack ──
+  // NOTE: We CANNOT override onContact via global variable because
+  // Phaser.Signal.add() in 14setup.js captures the function REFERENCE.
+  // Instead we replace the Signal listener in playState.create below.
   var _origOnContact = onContact;
-  onContact = function(evt) {
+
+  function rackAttackOnContact(evt) {
     var gi = playState.gameInfo;
     var ball = evt.ball;
 
@@ -248,37 +250,37 @@ if (RACK_ATTACK) {
     if (evt.collisionType === 'pocket' && ball.id === 0) {
       ball.active = false;
       ball.velocity = new Vector2D(0, 0);
-      ball.contactArray.push({
-        position: ball.position,
-        targetPosition: evt.target.position,
-        velocity: evt.ballVelocity,
-        collisionType: 'pocket',
-        type: 'pocket'
-      });
+      var info = new Object();
+      info.position = ball.position;
+      info.targetPosition = evt.target.position;
+      info.velocity = evt.ballVelocity;
+      info.collisionType = 'pocket';
+      info.screw = ball.screw;
+      info.type = 'pocket';
+      ball.contactArray.push(info);
       if (!gi.trial) {
         playPocketSound(evt);
         playPocketAnimation(evt);
       }
       gi.cueBallInHand = true;
-      // Do NOT set o.scratched or call awardBonuses (which sets fouled)
       return;
     }
 
-    // 8-BALL potted: treat as a normal ball (award points, no game-over)
+    // 8-BALL potted: award points normally, no game-over
     if (evt.collisionType === 'pocket' && ball.id === 8) {
       ball.active = false;
       ball.velocity = new Vector2D(0, 0);
-      ball.contactArray.push({
-        position: ball.position,
-        targetPosition: evt.target.position,
-        velocity: evt.ballVelocity,
-        collisionType: 'pocket',
-        type: 'pocket'
-      });
+      var info2 = new Object();
+      info2.position = ball.position;
+      info2.targetPosition = evt.target.position;
+      info2.velocity = evt.ballVelocity;
+      info2.collisionType = 'pocket';
+      info2.screw = ball.screw;
+      info2.type = 'pocket';
+      ball.contactArray.push(info2);
       if (!gi.trial) {
         playPocketSound(evt);
         playPocketAnimation(evt);
-        // Award bonus manually (skipping the 8-ball game-over check in awardBonuses)
         gi.numBalls--;
         gi.pottedBallArray.push(ball.id);
         checkLevelComplete();
@@ -298,9 +300,9 @@ if (RACK_ATTACK) {
       return;
     }
 
-    // Everything else: normal handling
-    _origOnContact(evt);
-  };
+    // Everything else: use original handler
+    _origOnContact.call(this, evt);
+  }
 
   // ── Override playState.create: Rack Attack setup ──
   var _origPlayCreate2 = playState.create;
@@ -316,14 +318,28 @@ if (RACK_ATTACK) {
     raTimerStarted = false;
     raGameEnded = false;
     raStartTime = 0;
+
+    // CRITICAL: Replace the contact event listener on the Phaser.Signal.
+    // 14setup.js does: this.contactEvent = new Phaser.Signal;
+    //                  this.contactEvent.add(onContact, this);
+    // Inside an IIFE, "this" is window, so window.contactEvent is the Signal.
+    // billiardPhysics stores it as this.contactEvent = t (first arg).
+    // The Signal holds a REFERENCE to the original onContact – overriding
+    // the global variable does NOT change what the Signal calls.
+    // We must removeAll() and re-add our custom handler.
+    var signal = (gi.phys && gi.phys.contactEvent) || window.contactEvent;
+    if (signal && signal.removeAll) {
+      signal.removeAll();
+      signal.add(rackAttackOnContact, this);
+    }
   };
 
-  // ── Override playState.update: suppress all fouls, lock turn to p1 ──
+  // ── Override playState.update: suppress fouls, lock turn to p1 ──
   var _origPlayUpdate = playState.update;
   playState.update = function() {
     var gi = this.gameInfo;
 
-    // BEFORE original update: clear any scratch that might have slipped through
+    // BEFORE original update: clear scratch flag (safety net)
     if (gi) {
       gi.scratched = false;
     }
@@ -342,11 +358,8 @@ if (RACK_ATTACK) {
       if (gi.turnArrow2) gi.turnArrow2.frame = 0;
     }
 
-    // If a non-scratch foul was flagged (miss, cushion rule, etc.),
+    // If a foul was flagged (miss, cushion rule, etc.),
     // dismiss the foul window AND properly reset the shot state.
-    // The original code schedules p() on a 5-second delay after the foul
-    // window hides; since we hide it immediately we must trigger the
-    // shot-reset ourselves by setting initVars=false so v() re-runs.
     if (gi.fouled && !raGameEnded) {
       gi.fouled = false;
       gi.scratched = false;
@@ -360,8 +373,8 @@ if (RACK_ATTACK) {
       gi.foulDisplayComplete = true;
       gi.gameRunning = true;
 
-      // Trigger a clean shot-reset on the NEXT frame:
-      // initVars=false causes the engine's own v() to run internally
+      // Trigger shot-reset on the NEXT frame via the engine's
+      // own code path: 0==a.initVars && (v(), a.initVars=!0)
       gi.shotReset = true;
       gi.initVars = false;
       gi.shotComplete = false;
@@ -372,9 +385,14 @@ if (RACK_ATTACK) {
       gi.cueTweenComplete = false;
     }
 
-    // Safety: if foulDisplayComplete got stuck false, unstick it
+    // Safety: unstick foulDisplayComplete
     if (!gi.foulDisplayComplete && gi.foulWindow && !gi.foulWindow.visible && !gi.gameOver) {
       gi.foulDisplayComplete = true;
+    }
+
+    // Safety: ensure gameRunning is true when not in game-over
+    if (!gi.gameRunning && !gi.gameOver && !raGameEnded && !gi.shotRunning) {
+      gi.gameRunning = true;
     }
 
     // Only the 90-s timer should cause game-over; cancel anything else
@@ -389,6 +407,13 @@ if (RACK_ATTACK) {
       gi.shotReset = true;
       gi.initVars = false;
       gi.shotComplete = false;
+    }
+
+    // Safety: if cue ball is inactive after animation done, ensure ball-in-hand
+    if (gi.ballArray && gi.ballArray[0] && !gi.ballArray[0].active &&
+        gi.ballArray[0].pocketTweenComplete !== false &&
+        !gi.cueBallInHand && !gi.shotRunning && !gi.gameOver) {
+      gi.cueBallInHand = true;
     }
   };
 }
