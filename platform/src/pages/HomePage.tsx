@@ -73,9 +73,8 @@ export default function HomePage() {
           animate={{ x: 0, opacity: 1 }}
           transition={{ delay: 0.2 }}
           whileTap={{ scale: 0.95 }}
-          onClick={() => navigate('/game')}
-          disabled={user.gameEnergy <= 0}
-          className="flex-1 rounded-2xl font-orbitron text-sm font-bold bg-gradient-to-r from-cyber-cyan to-cyber-purple text-white flex flex-col items-center justify-center gap-2 disabled:opacity-30 fire-border min-h-[100px]"
+          onClick={() => user.gameEnergy > 0 ? navigate('/game') : navigate('/shop')}
+          className={`flex-1 rounded-2xl font-orbitron text-sm font-bold bg-gradient-to-r from-cyber-cyan to-cyber-purple text-white flex flex-col items-center justify-center gap-2 fire-border min-h-[100px] ${user.gameEnergy <= 0 ? 'opacity-60' : ''}`}
         >
           <FaPlay className="text-2xl" />
           <span>PLAY</span>
@@ -88,9 +87,8 @@ export default function HomePage() {
         animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.25 }}
         whileTap={{ scale: 0.97 }}
-        onClick={() => navigate('/game?mode=rackattack')}
-        disabled={user.gameEnergy <= 0}
-        className="w-full glass-card p-4 flex items-center gap-4 border border-cyber-pink/30 disabled:opacity-30"
+        onClick={() => user.gameEnergy > 0 ? navigate('/game?mode=rackattack') : navigate('/shop')}
+        className={`w-full glass-card p-4 flex items-center gap-4 border border-cyber-pink/30 ${user.gameEnergy <= 0 ? 'opacity-60' : ''}`}
       >
         <div className="w-12 h-12 rounded-xl bg-cyber-pink/10 flex items-center justify-center">
           <FaClock className="text-cyber-pink text-xl" />

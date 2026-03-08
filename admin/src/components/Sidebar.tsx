@@ -3,17 +3,17 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import {
   FaChartBar, FaUsers, FaMoneyBillWave, FaCalendar, FaCrown,
-  FaExchangeAlt, FaShieldAlt, FaSignOutAlt, FaBars, FaTimes
+  FaExchangeAlt, FaShieldAlt, FaSignOutAlt, FaBars, FaTimes, FaBolt
 } from 'react-icons/fa';
 
 const NAV_ITEMS = [
-  { path: '/',              label: 'Dashboard',    icon: FaChartBar },
-  { path: '/users',         label: 'Users',        icon: FaUsers },
-  { path: '/payments',      label: 'Payments',     icon: FaMoneyBillWave },
-  { path: '/seasons',       label: 'Seasons',      icon: FaCalendar },
-  { path: '/vip',           label: 'VIP',          icon: FaCrown },
-  { path: '/transactions',  label: 'Transactions', icon: FaExchangeAlt },
-  { path: '/actions',       label: 'Actions Log',  icon: FaShieldAlt },
+  { path: '/',              label: 'Dashboard',      icon: FaChartBar },
+  { path: '/users',         label: 'Users',          icon: FaUsers },
+  { path: '/payments',      label: 'Payments',       icon: FaMoneyBillWave },
+  { path: '/seasons',       label: 'Seasons',        icon: FaCalendar },
+  { path: '/vip',           label: 'Subscriptions',  icon: FaCrown },
+  { path: '/transactions',  label: 'Transactions',   icon: FaExchangeAlt },
+  { path: '/actions',       label: 'Actions Log',    icon: FaShieldAlt },
 ];
 
 export default function Sidebar() {

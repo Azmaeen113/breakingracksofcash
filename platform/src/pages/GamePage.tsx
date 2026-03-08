@@ -25,8 +25,8 @@ export default function GamePage() {
     spendEnergy(userId).then(async (success) => {
       if (cancelled) return;
       if (!success) {
-        toast.error('No energy left!');
-        navigate('/', { replace: true });
+        toast.error('No energy left! Buy more in the shop.');
+        navigate('/shop', { replace: true });
       } else {
         // Update local state so energy UI reflects the spend
         await refreshUser();

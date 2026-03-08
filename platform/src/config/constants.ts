@@ -13,6 +13,15 @@ export const DAILY_REWARDS: DailyReward[] = [
 // TON receiver wallet for all payments
 export const TON_RECEIVER_WALLET = 'UQCbRCf4OS6zeo3HtwVlq9Sg6ahV72Ux4WqlPpcYLpNlUcyl';
 
+// EVM receiver wallet (ETH, BSC, PLS - all chains)
+export const EVM_RECEIVER_WALLET = '0x73F82ecf7345De5d4509be3b418818d00b2cBa1C';
+
+// Base energy per day (free users)
+export const BASE_ENERGY_PER_DAY = 3;
+
+// Energy by VIP tier [free, bronze, silver, gold]
+export const VIP_ENERGY_PER_DAY = [3, 6, 13, 20];
+
 export const SEASON_PRIZES: PrizeTier[] = [
   { rankStart: 1,  rankEnd: 1,  prize: 1000 },
   { rankStart: 2,  rankEnd: 2,  prize: 500 },

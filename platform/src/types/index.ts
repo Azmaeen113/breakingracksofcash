@@ -73,9 +73,21 @@ export interface VipPurchase {
   userId: string;
   tier: number;
   amountUSD?: number;
+  txHash?: string;
   purchasedAt: Timestamp;
   expiresAt: Timestamp;
   status: 'pending' | 'confirmed' | 'expired';
+}
+
+// ─── Energy Purchase ────────────────────────────────
+export interface EnergyPurchase {
+  id?: string;
+  userId: string;
+  energy: number;
+  amountUSD: number;
+  txHash?: string;
+  purchasedAt: Timestamp;
+  status: 'pending' | 'confirmed';
 }
 
 // ─── Admin Action ───────────────────────────────────
@@ -120,8 +132,16 @@ export interface VipPlan {
   durationDays: number;
   benefits: string[];
   cooldownItems: number;
+  energyPerDay: number;
   color: string;
   gradient: string;
+}
+
+// ─── Energy Offer ───────────────────────────────────
+export interface EnergyOffer {
+  id: string;
+  energy: number;
+  priceUSD: number;
 }
 
 // ─── Daily Reward ───────────────────────────────────

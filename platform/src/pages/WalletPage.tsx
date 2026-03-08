@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useUser } from '@/context/UserContext';
 import { updateUser, getUserTransactions } from '@/services/firestore';
-import { CASH_TO_TOKEN_RATE } from '@/config/constants';
+import { CASH_TO_TOKEN_RATE, EVM_RECEIVER_WALLET } from '@/config/constants';
 import type { TransactionData } from '@/types';
 import {
-  FaWallet, FaArrowDown, FaArrowUp, FaCopy, FaCheck, FaHistory, FaCoins, FaGem, FaExchangeAlt, FaLink
+  FaWallet, FaArrowDown, FaArrowUp, FaCopy, FaCheck, FaHistory,
+  FaCoins, FaGem, FaExchangeAlt, FaEthereum, FaUnlink
 } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 
@@ -13,7 +14,6 @@ export default function WalletPage() {
   const { user, userId, refreshUser } = useUser();
   const [transactions, setTransactions] = useState<TransactionData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [walletInput, setWalletInput] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -32,22 +32,43 @@ export default function WalletPage() {
     setLoading(false);
   };
 
+  // Connect EVM wallet via MetaMask / injected provider
   const handleConnectWallet = async () => {
-    const addr = walletInput.trim();
-    if (!addr) {
-      toast.error('Enter a valid wallet address');
-      return;
-    }
     setConnecting(true);
     try {
-      await updateUser(userId, { walletAddress: addr });
+      const { BrowserProvider } = await import('ethers');
+      const ethereum = (window as any).ethereum;
+      if (!ethereum) {
+        toast.error('No EVM wallet detected. Install MetaMask or a compatible wallet.');
+        setConnecting(false);
+        return;
+      }
+      const provider = new BrowserProvider(ethereum);
+      await provider.send('eth_requestAccounts', []);
+      const signer = await provider.getSigner();
+      const address = await signer.getAddress();
+      await updateUser(userId, { walletAddress: address });
       await refreshUser();
       toast.success('Wallet connected!');
-      setWalletInput('');
-    } catch {
-      toast.error('Failed to connect wallet');
+    } catch (err: any) {
+      if (err?.code === 'ACTION_REJECTED' || err?.message?.includes('reject')) {
+        toast.error('Connection rejected');
+      } else {
+        toast.error('Failed to connect wallet');
+        console.error(err);
+      }
     }
     setConnecting(false);
+  };
+
+  const handleDisconnect = async () => {
+    try {
+      await updateUser(userId, { walletAddress: null });
+      await refreshUser();
+      toast.success('Wallet disconnected');
+    } catch {
+      toast.error('Failed to disconnect');
+    }
   };
 
   const handleCopy = (text: string) => {
@@ -103,11 +124,20 @@ export default function WalletPage() {
         <span>{CASH_TO_TOKEN_RATE} CASH = 1 TOKEN</span>
       </div>
 
-      {/* Connected wallet or connect form */}
+      {/* Connected wallet or connect button */}
       {user.walletAddress ? (
-        <div className="glass-card p-4">
-          <p className="font-orbitron text-[10px] text-gray-500 tracking-widest mb-2">CONNECTED WALLET</p>
+        <div className="glass-card p-4 border border-green-500/20">
+          <div className="flex items-center justify-between mb-2">
+            <p className="font-orbitron text-[10px] text-green-400 tracking-widest">CONNECTED WALLET</p>
+            <button
+              onClick={handleDisconnect}
+              className="flex items-center gap-1 text-[10px] text-red-400 hover:text-red-300"
+            >
+              <FaUnlink className="text-[8px]" /> Disconnect
+            </button>
+          </div>
           <div className="flex items-center gap-2">
+            <FaEthereum className="text-cyber-cyan flex-shrink-0" />
             <p className="text-xs text-gray-400 font-mono truncate flex-1">{user.walletAddress}</p>
             <button onClick={() => handleCopy(user.walletAddress!)}>
               {copied ? <FaCheck className="text-green-400" /> : <FaCopy className="text-gray-500" />}
@@ -122,23 +152,27 @@ export default function WalletPage() {
           className="glass-card p-5 space-y-4 border border-cyber-cyan/20"
         >
           <div className="text-center">
-            <FaLink className="text-cyber-cyan text-2xl mx-auto mb-2" />
-            <p className="font-orbitron text-xs text-white">Connect Your Wallet</p>
-            <p className="text-[10px] text-gray-500 mt-1">Connect to receive season rewards</p>
+            <FaEthereum className="text-cyber-cyan text-3xl mx-auto mb-2" />
+            <p className="font-orbitron text-xs text-white">Connect EVM Wallet</p>
+            <p className="text-[10px] text-gray-500 mt-1">
+              Connect MetaMask or any EVM wallet to receive rewards
+            </p>
           </div>
-          <input
-            type="text"
-            value={walletInput}
-            onChange={e => setWalletInput(e.target.value)}
-            placeholder="Enter TON wallet address"
-            className="w-full p-3 rounded-xl bg-cyber-dark border border-gray-700/50 text-white text-sm focus:border-cyber-cyan outline-none font-mono"
-          />
           <button
             onClick={handleConnectWallet}
             disabled={connecting}
-            className="w-full py-3 rounded-xl font-orbitron text-sm font-bold bg-gradient-to-r from-cyber-cyan to-cyber-purple text-white active:scale-95 transition-transform disabled:opacity-30"
+            className="w-full py-3 rounded-xl font-orbitron text-sm font-bold bg-gradient-to-r from-cyber-cyan to-cyber-purple text-white active:scale-95 transition-transform disabled:opacity-30 flex items-center justify-center gap-2"
           >
-            {connecting ? 'Connecting...' : 'Connect Wallet'}
+            {connecting ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Connecting...
+              </>
+            ) : (
+              <>
+                <FaWallet /> Connect Wallet
+              </>
+            )}
           </button>
         </motion.div>
       )}
@@ -150,6 +184,13 @@ export default function WalletPage() {
           Top players on the leaderboard will receive token rewards at the end of each season.
           Make sure your wallet is connected to receive prizes!
         </p>
+      </div>
+
+      {/* Payment wallet info */}
+      <div className="glass-card p-4 border border-gray-700/20">
+        <p className="font-orbitron text-[10px] text-gray-500 tracking-widest mb-2">PAYMENT WALLET</p>
+        <p className="text-[10px] text-gray-600 font-mono break-all">{EVM_RECEIVER_WALLET}</p>
+        <p className="text-[10px] text-gray-600 mt-1">Accepts ETH, BSC, PLS</p>
       </div>
 
       {/* Transaction History */}

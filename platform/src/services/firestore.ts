@@ -6,8 +6,8 @@ import {
 import { db } from './firebase';
 import type { UserData, TransactionData, PaymentRequest, SeasonData, LeaderboardEntry } from '@/types';
 import { getUserLeague } from '@/config/leagues';
-import { getVipMultiplier } from '@/config/vipPlans';
-import { REFERRAL_REWARD, TAP_CYCLE_BONUS, TAP_COOLDOWN_MS, COOLDOWN_RESET_REDUCTION_MS, MIN_WITHDRAWAL, WITHDRAWAL_COOLDOWN_DAYS, CASH_TO_TOKEN_RATE } from '@/config/constants';
+import { getVipMultiplier, ENERGY_OFFERS } from '@/config/vipPlans';
+import { REFERRAL_REWARD, TAP_CYCLE_BONUS, TAP_COOLDOWN_MS, COOLDOWN_RESET_REDUCTION_MS, MIN_WITHDRAWAL, WITHDRAWAL_COOLDOWN_DAYS, CASH_TO_TOKEN_RATE, VIP_ENERGY_PER_DAY } from '@/config/constants';
 
 // ─── User CRUD ──────────────────────────────────────
 
@@ -66,12 +66,15 @@ export async function checkAndResetEnergy(userId: string, user: UserData): Promi
   const now = new Date();
   const lastReset = user.lastEnergyReset?.toDate();
   if (!lastReset || now.toDateString() !== lastReset.toDateString()) {
+    // VIP tier determines energy; fall back to league if higher
+    const vipEnergy = VIP_ENERGY_PER_DAY[user.vipTier] ?? VIP_ENERGY_PER_DAY[0];
     const league = getUserLeague(user.seasonCash);
+    const dailyEnergy = Math.max(vipEnergy, league.energyPerDay);
     await updateUser(userId, {
-      gameEnergy: league.energyPerDay,
+      gameEnergy: dailyEnergy,
       lastEnergyReset: Timestamp.now(),
     } as any);
-    return league.energyPerDay;
+    return dailyEnergy;
   }
   return user.gameEnergy;
 }
@@ -345,23 +348,48 @@ export async function getUserPaymentRequests(userId: string): Promise<PaymentReq
 
 // ─── VIP ────────────────────────────────────────────
 
-export async function activateVip(userId: string, tier: number, durationDays: number): Promise<void> {
+export async function activateVip(userId: string, tier: number, durationDays: number, txHash?: string, amountUSD?: number): Promise<void> {
   const expiresAt = Timestamp.fromDate(new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000));
   const cooldownItems = [0, 2, 5, 10][tier] || 0;
+  const energyPerDay = VIP_ENERGY_PER_DAY[tier] ?? VIP_ENERGY_PER_DAY[0];
   await updateDoc(doc(db, 'users', userId), {
     vipTier: tier,
     vipExpiresAt: expiresAt,
     cooldownResets: increment(cooldownItems),
     isPremium: true,
+    gameEnergy: energyPerDay, // immediately grant VIP energy
   });
   await addDoc(collection(db, 'vipPurchases'), {
     userId,
     tier,
+    amountUSD: amountUSD ?? 0,
+    txHash: txHash ?? '',
     purchasedAt: Timestamp.now(),
     expiresAt,
     status: 'confirmed',
   });
-  await logTransaction(userId, 'credit', 0, `VIP Tier ${tier} activated for ${durationDays} days`);
+  await logTransaction(userId, 'credit', 0, `VIP Tier ${tier} activated for ${durationDays} days${txHash ? ' (tx: ' + txHash.slice(0, 10) + '...)' : ''}`);
+}
+
+// ─── Extra Energy Purchase ──────────────────────────
+
+export async function purchaseExtraEnergy(userId: string, offerId: string, txHash: string): Promise<number> {
+  const offer = ENERGY_OFFERS.find(o => o.id === offerId);
+  if (!offer) throw new Error('Invalid energy offer');
+  await updateDoc(doc(db, 'users', userId), {
+    gameEnergy: increment(offer.energy),
+    isPremium: true,
+  });
+  await addDoc(collection(db, 'energyPurchases'), {
+    userId,
+    energy: offer.energy,
+    amountUSD: offer.priceUSD,
+    txHash,
+    purchasedAt: Timestamp.now(),
+    status: 'confirmed',
+  });
+  await logTransaction(userId, 'credit', 0, `Purchased ${offer.energy} extra energy for $${offer.priceUSD} (tx: ${txHash.slice(0, 10)}...)`);
+  return offer.energy;
 }
 
 // ─── Seasons ────────────────────────────────────────

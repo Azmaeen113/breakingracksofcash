@@ -1,96 +1,117 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useUser } from '@/context/UserContext';
-import { VIP_PLANS, getVipMultiplier, getTapDamage } from '@/config/vipPlans';
-import { activateVip } from '@/services/firestore';
-import { TON_RECEIVER_WALLET } from '@/config/constants';
-import { FaCrown, FaBolt, FaGamepad, FaTimes, FaCheck, FaShoppingCart, FaFire, FaStar } from 'react-icons/fa';
+import { VIP_PLANS, ENERGY_OFFERS, getVipMultiplier, getTapDamage } from '@/config/vipPlans';
+import { activateVip, purchaseExtraEnergy, useCooldownReset } from '@/services/firestore';
+import { EVM_RECEIVER_WALLET, VIP_ENERGY_PER_DAY } from '@/config/constants';
+import type { VipPlan, EnergyOffer } from '@/types';
+import {
+  FaCrown, FaBolt, FaGamepad, FaTimes, FaCheck, FaShoppingCart,
+  FaFire, FaStar, FaWallet, FaEthereum
+} from 'react-icons/fa';
 import toast from 'react-hot-toast';
+
+// ─── EVM helpers using ethers.js ──────────────────────
+async function connectWallet(): Promise<{ provider: any; signer: any; address: string }> {
+  const { BrowserProvider } = await import('ethers');
+  const ethereum = (window as any).ethereum;
+  if (!ethereum) throw new Error('No wallet detected. Install MetaMask or another EVM wallet.');
+  const provider = new BrowserProvider(ethereum);
+  await provider.send('eth_requestAccounts', []);
+  const signer = await provider.getSigner();
+  const address = await signer.getAddress();
+  return { provider, signer, address };
+}
+
+async function sendEvmPayment(amountUSD: number): Promise<string> {
+  const { parseEther } = await import('ethers');
+  const { signer } = await connectWallet();
+  // Convert USD to ETH-equivalent (simplified: $1 ≈ 0.0004 ETH @ ~$2500)
+  // In production, use a price oracle. For now, send a small representative amount.
+  const ethAmount = (amountUSD * 0.0004).toFixed(6);
+  const tx = await signer.sendTransaction({
+    to: EVM_RECEIVER_WALLET,
+    value: parseEther(ethAmount),
+  });
+  await tx.wait();
+  return tx.hash;
+}
 
 export default function ShopPage() {
   const { user, userId, refreshUser } = useUser();
-  const [tab, setTab] = useState<'vip' | 'items'>('vip');
-  const [selectedPlan, setSelectedPlan] = useState<typeof VIP_PLANS[0] | null>(null);
+  const [tab, setTab] = useState<'vip' | 'energy'>('vip');
+  const [paymentModal, setPaymentModal] = useState<{
+    type: 'vip' | 'energy';
+    plan?: VipPlan;
+    offer?: EnergyOffer;
+  } | null>(null);
   const [processing, setProcessing] = useState(false);
 
   if (!user) return null;
 
-  const handlePurchaseVip = async () => {
-    if (!selectedPlan) return;
+  // ── EVM payment for VIP ───────────────────────────
+  const handlePurchaseVip = async (plan: VipPlan) => {
     setProcessing(true);
     try {
-      // Use TonConnect for payment
-      const tonconnect = (window as any).__tonConnectUI;
-      if (tonconnect) {
-        // Calculate TON amount (approximate, could use price oracle)
-        const tonAmount = selectedPlan.priceUSD; // Simplified: 1 USD ≈ adjusted TON amount
-        try {
-          const tx = {
-            validUntil: Math.floor(Date.now() / 1000) + 600,
-            messages: [
-              {
-                address: TON_RECEIVER_WALLET,
-                amount: String(Math.floor(tonAmount * 1e9)), // nanoTON
-              },
-            ],
-          };
-          await tonconnect.sendTransaction(tx);
-          // Payment successful - activate VIP
-          await activateVip(userId, selectedPlan.tier, selectedPlan.durationDays);
-          await refreshUser();
-          toast.success(`VIP ${selectedPlan.name} activated!`);
-          setSelectedPlan(null);
-        } catch (txErr: any) {
-          if (txErr?.message?.includes('cancel')) {
-            toast.error('Transaction cancelled');
-          } else {
-            toast.error('Payment failed. Please try again.');
-          }
-        }
+      const txHash = await sendEvmPayment(plan.priceUSD);
+      await activateVip(userId, plan.tier, plan.durationDays, txHash, plan.priceUSD);
+      await refreshUser();
+      toast.success(`VIP ${plan.name} activated!`);
+      setPaymentModal(null);
+    } catch (err: any) {
+      if (err?.code === 'ACTION_REJECTED' || err?.message?.includes('reject')) {
+        toast.error('Transaction rejected');
+      } else if (err?.message?.includes('No wallet')) {
+        toast.error(err.message);
       } else {
-        // Fallback: show TON wallet address for manual payment
-        try {
-          await navigator.clipboard.writeText(TON_RECEIVER_WALLET);
-          toast(`Send $${selectedPlan.priceUSD} worth of TON to the copied wallet address.\nWallet copied to clipboard!`, {
-            icon: '💎',
-            duration: 6000,
-          });
-        } catch {
-          toast(`Send $${selectedPlan.priceUSD} worth of TON to:\n${TON_RECEIVER_WALLET}`, {
-            icon: '💎',
-            duration: 8000,
-          });
-        }
+        toast.error('Payment failed. Please try again.');
+        console.error(err);
       }
-    } catch (err) {
-      toast.error('Purchase failed');
     }
     setProcessing(false);
   };
 
-  const handleBuyItem = async (itemType: string) => {
+  // ── EVM payment for Energy ────────────────────────
+  const handlePurchaseEnergy = async (offer: EnergyOffer) => {
     setProcessing(true);
     try {
-      if (itemType === 'cooldown_reset') {
-        const { useCooldownReset } = await import('@/services/firestore');
-        const success = await useCooldownReset(userId);
-        if (success) {
-          await refreshUser();
-          toast.success('Cooldown reduced by 12 hours!');
-        } else {
-          toast.error('No cooldown resets available');
-        }
-      } else if (itemType === 'energy') {
-        const { updateUser } = await import('@/services/firestore');
-        await updateUser(userId, { gameEnergy: (user.gameEnergy || 0) + 1 });
+      const txHash = await sendEvmPayment(offer.priceUSD);
+      await purchaseExtraEnergy(userId, offer.id, txHash);
+      await refreshUser();
+      toast.success(`+${offer.energy} Energy added!`);
+      setPaymentModal(null);
+    } catch (err: any) {
+      if (err?.code === 'ACTION_REJECTED' || err?.message?.includes('reject')) {
+        toast.error('Transaction rejected');
+      } else if (err?.message?.includes('No wallet')) {
+        toast.error(err.message);
+      } else {
+        toast.error('Payment failed. Please try again.');
+        console.error(err);
+      }
+    }
+    setProcessing(false);
+  };
+
+  // ── Use cooldown reset item ───────────────────────
+  const handleUseCooldown = async () => {
+    setProcessing(true);
+    try {
+      const success = await useCooldownReset(userId);
+      if (success) {
         await refreshUser();
-        toast.success('+1 Energy added!');
+        toast.success('Cooldown reduced by 12 hours!');
+      } else {
+        toast.error('No cooldown resets available');
       }
     } catch {
       toast.error('Failed to use item');
     }
     setProcessing(false);
   };
+
+  const currentEnergy = user.gameEnergy || 0;
+  const dailyEnergy = VIP_ENERGY_PER_DAY[user.vipTier] ?? 3;
 
   return (
     <div className="px-4 pb-28 space-y-5">
@@ -103,9 +124,29 @@ export default function ShopPage() {
         <p className="text-xs text-gray-500">Upgrade your experience</p>
       </div>
 
+      {/* Energy Status Bar */}
+      <div className="glass-card p-4 flex items-center justify-between border border-cyber-cyan/20">
+        <div className="flex items-center gap-3">
+          <FaBolt className="text-cyber-cyan text-xl" />
+          <div>
+            <p className="font-orbitron text-sm text-white">{currentEnergy} Energy</p>
+            <p className="text-[10px] text-gray-500">{dailyEnergy}/day ({user.vipTier > 0 ? ['', 'Bronze', 'Silver', 'Gold'][user.vipTier] + ' VIP' : 'Free'})</p>
+          </div>
+        </div>
+        {user.cooldownResets > 0 && (
+          <button
+            onClick={handleUseCooldown}
+            disabled={processing}
+            className="px-3 py-1.5 rounded-lg bg-cyber-cyan/10 border border-cyber-cyan/20 text-[10px] text-cyber-cyan font-orbitron disabled:opacity-30"
+          >
+            Reset CD ({user.cooldownResets})
+          </button>
+        )}
+      </div>
+
       {/* Tabs */}
       <div className="flex gap-2">
-        {(['vip', 'items'] as const).map(t => (
+        {(['vip', 'energy'] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -115,7 +156,7 @@ export default function ShopPage() {
                 : 'bg-cyber-dark/50 text-gray-500 border border-gray-700/30'
             }`}
           >
-            {t === 'vip' ? 'VIP Plans' : 'Items'}
+            {t === 'vip' ? 'VIP Plans' : 'Buy Energy'}
           </button>
         ))}
       </div>
@@ -205,7 +246,7 @@ export default function ShopPage() {
                     </div>
                   ) : (
                     <button
-                      onClick={() => setSelectedPlan(plan)}
+                      onClick={() => setPaymentModal({ type: 'vip', plan })}
                       className="w-full py-3 rounded-xl font-orbitron text-xs font-bold bg-gradient-to-r from-cyber-pink to-cyber-purple text-white active:scale-95 transition-transform"
                     >
                       Purchase
@@ -217,64 +258,50 @@ export default function ShopPage() {
           </div>
         </>
       ) : (
-        /* Items tab */
+        /* Energy Offers tab */
         <div className="space-y-3">
-          {/* Cooldown Reset */}
-          <motion.div
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            className="glass-card p-4 flex items-center gap-4"
-          >
-            <div className="w-12 h-12 rounded-xl bg-cyber-cyan/10 flex items-center justify-center">
-              <FaBolt className="text-cyber-cyan text-xl" />
-            </div>
-            <div className="flex-1">
-              <p className="font-orbitron text-xs text-white">Cooldown Reset</p>
-              <p className="text-[10px] text-gray-500">Reduce tap cooldown by 12 hours</p>
-              <p className="text-[10px] text-cyber-cyan">
-                Available: {user.cooldownResets || 0}
-              </p>
-            </div>
-            <button
-              onClick={() => handleBuyItem('cooldown_reset')}
-              disabled={!user.cooldownResets || processing}
-              className="px-4 py-2 rounded-xl bg-cyber-cyan/20 border border-cyber-cyan/30 text-xs text-cyber-cyan font-orbitron disabled:opacity-30"
-            >
-              Use
-            </button>
-          </motion.div>
+          <p className="text-xs text-gray-500 text-center">Buy extra energy to play more games today</p>
 
-          {/* Extra Energy */}
-          <motion.div
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.1 }}
-            className="glass-card p-4 flex items-center gap-4"
-          >
-            <div className="w-12 h-12 rounded-xl bg-cyber-pink/10 flex items-center justify-center">
-              <FaGamepad className="text-cyber-pink text-xl" />
-            </div>
-            <div className="flex-1">
-              <p className="font-orbitron text-xs text-white">Extra Energy</p>
-              <p className="text-[10px] text-gray-500">Play one more game today</p>
-              <p className="text-[10px] text-cyber-pink">
-                Current: {user.gameEnergy || 0}
-              </p>
-            </div>
-            <button
-              onClick={() => handleBuyItem('energy')}
-              disabled={processing}
-              className="px-4 py-2 rounded-xl bg-cyber-pink/20 border border-cyber-pink/30 text-xs text-cyber-pink font-orbitron disabled:opacity-30"
+          {ENERGY_OFFERS.map((offer, idx) => (
+            <motion.div
+              key={offer.id}
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: idx * 0.05 }}
+              className="glass-card p-4 flex items-center gap-4"
             >
-              +1
-            </button>
-          </motion.div>
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                offer.energy >= 100 ? 'bg-cyber-gold/10' :
+                offer.energy >= 50 ? 'bg-cyber-pink/10' :
+                offer.energy >= 25 ? 'bg-purple-500/10' : 'bg-cyber-cyan/10'
+              }`}>
+                <div className="text-center">
+                  <FaGamepad className={`text-lg mx-auto ${
+                    offer.energy >= 100 ? 'text-cyber-gold' :
+                    offer.energy >= 50 ? 'text-cyber-pink' :
+                    offer.energy >= 25 ? 'text-purple-400' : 'text-cyber-cyan'
+                  }`} />
+                </div>
+              </div>
+              <div className="flex-1">
+                <p className="font-orbitron text-sm text-white">+{offer.energy} Energy</p>
+                <p className="text-[10px] text-gray-500">Play {offer.energy} more games</p>
+              </div>
+              <button
+                onClick={() => setPaymentModal({ type: 'energy', offer })}
+                disabled={processing}
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyber-pink to-cyber-purple text-xs text-white font-orbitron font-bold disabled:opacity-30 active:scale-95 transition-transform"
+              >
+                ${offer.priceUSD.toFixed(2)}
+              </button>
+            </motion.div>
+          ))}
         </div>
       )}
 
-      {/* Payment Modal - TON Only */}
-      {selectedPlan && (
-        <div className="fixed inset-0 z-[80] bg-black/80 flex items-center justify-center p-4" onClick={() => setSelectedPlan(null)}>
+      {/* ── EVM Payment Modal ── */}
+      {paymentModal && (
+        <div className="fixed inset-0 z-[80] bg-black/80 flex items-center justify-center p-4" onClick={() => !processing && setPaymentModal(null)}>
           <motion.div
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
@@ -282,27 +309,60 @@ export default function ShopPage() {
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h3 className="font-orbitron text-sm text-white">Pay with TON</h3>
-              <button onClick={() => setSelectedPlan(null)} className="text-gray-500"><FaTimes /></button>
+              <h3 className="font-orbitron text-sm text-white flex items-center gap-2">
+                <FaEthereum className="text-cyber-cyan" /> Pay with Wallet
+              </h3>
+              <button onClick={() => !processing && setPaymentModal(null)} className="text-gray-500">
+                <FaTimes />
+              </button>
             </div>
 
             <div className="text-center">
-              <p className="text-xs text-gray-500">{selectedPlan.name} VIP — {selectedPlan.durationDays} days</p>
-              <p className="font-orbitron text-2xl text-white">${selectedPlan.priceUSD}</p>
+              {paymentModal.type === 'vip' && paymentModal.plan ? (
+                <>
+                  <p className="text-xs text-gray-500">{paymentModal.plan.name} VIP — {paymentModal.plan.durationDays} days</p>
+                  <p className="font-orbitron text-2xl text-white mt-1">${paymentModal.plan.priceUSD}</p>
+                </>
+              ) : paymentModal.offer ? (
+                <>
+                  <p className="text-xs text-gray-500">+{paymentModal.offer.energy} Extra Energy</p>
+                  <p className="font-orbitron text-2xl text-white mt-1">${paymentModal.offer.priceUSD.toFixed(2)}</p>
+                </>
+              ) : null}
             </div>
 
             <div className="p-4 rounded-xl bg-cyber-dark border border-cyber-cyan/20 text-center space-y-2">
-              <span className="text-3xl">💎</span>
-              <p className="text-xs text-white">TON Wallet Payment</p>
-              <p className="text-[10px] text-gray-500">Send payment via TON to activate VIP</p>
+              <FaWallet className="text-3xl text-cyber-cyan mx-auto" />
+              <p className="text-xs text-white">EVM Wallet Payment</p>
+              <p className="text-[10px] text-gray-500">
+                Supports ETH, BSC, PLS — connect MetaMask or any EVM wallet
+              </p>
+              <p className="text-[9px] text-gray-600 font-mono break-all mt-2">
+                {EVM_RECEIVER_WALLET}
+              </p>
             </div>
 
             <button
-              onClick={handlePurchaseVip}
+              onClick={() => {
+                if (paymentModal.type === 'vip' && paymentModal.plan) {
+                  handlePurchaseVip(paymentModal.plan);
+                } else if (paymentModal.offer) {
+                  handlePurchaseEnergy(paymentModal.offer);
+                }
+              }}
               disabled={processing}
-              className="w-full py-3 rounded-xl font-orbitron text-sm font-bold bg-gradient-to-r from-cyber-pink to-cyber-purple text-white disabled:opacity-30 active:scale-95 transition-transform"
+              className="w-full py-3 rounded-xl font-orbitron text-sm font-bold bg-gradient-to-r from-cyber-pink to-cyber-purple text-white disabled:opacity-30 active:scale-95 transition-transform flex items-center justify-center gap-2"
             >
-              {processing ? 'Processing...' : 'Pay Now'}
+              {processing ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <FaWallet /> Connect & Pay
+                </>
+              )}
             </button>
           </motion.div>
         </div>

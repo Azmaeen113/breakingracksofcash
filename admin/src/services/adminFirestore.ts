@@ -107,6 +107,7 @@ export async function adminSetVip(userId: string, tier: number, days: number) {
   await updateDoc(doc(db, 'users', userId), {
     vipTier: tier,
     vipExpiresAt: Timestamp.fromDate(expiresAt),
+    isPremium: true,
     updatedAt: Timestamp.now(),
   });
 }
@@ -115,6 +116,30 @@ export async function adminRemoveVip(userId: string) {
   await updateDoc(doc(db, 'users', userId), {
     vipTier: 0,
     vipExpiresAt: null,
+    updatedAt: Timestamp.now(),
+  });
+}
+
+// ── Subscription / Purchase History ───────────────────────────
+export async function getAllVipPurchases(maxCount = 200) {
+  const q = query(collection(db, 'vipPurchases'), orderBy('purchasedAt', 'desc'), limit(maxCount));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+export async function getAllEnergyPurchases(maxCount = 200) {
+  const q = query(collection(db, 'energyPurchases'), orderBy('purchasedAt', 'desc'), limit(maxCount));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+export async function adminGrantEnergy(userId: string, amount: number) {
+  const userRef = doc(db, 'users', userId);
+  const snap = await getDoc(userRef);
+  if (!snap.exists()) throw new Error('User not found');
+  const current = snap.data().gameEnergy || 0;
+  await updateDoc(userRef, {
+    gameEnergy: current + amount,
     updatedAt: Timestamp.now(),
   });
 }

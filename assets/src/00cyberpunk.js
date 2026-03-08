@@ -230,6 +230,9 @@ if (RACK_ATTACK) {
     gi.time = Math.floor(elapsed * 60);
     if (remaining <= 0 && !raGameEnded) {
       raGameEnded = true;
+      // Zero out time/AI bonuses so the game-over panel only shows ball-pot score
+      gi.time = 180 * 60; // time bonus = 180 - 180 = 0
+      projectInfo.aiRating = 0; // AI bonus = 100 * 0 = 0
       gi.gameOver = true;
       gi.winner = 'p1';
       gi.foulDisplayComplete = true;
