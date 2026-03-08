@@ -244,7 +244,7 @@ export default function LeaderboardPage() {
                   <div className="flex items-center gap-1">
                     <img src={league.image} alt={league.name} className="w-4 h-4 object-contain" />
                     <p className={`font-orbitron text-xs truncate ${isMe ? 'text-cyber-cyan' : 'text-white'}`}>
-                      {entry.username || entry.userId.slice(-8)}
+                      {isMe ? (user?.odl_username || entry.username || entry.userId.slice(-8)) : (entry.username || entry.userId.slice(-8))}
                     </p>
                     {entry.isPremium && (
                       <span className="text-cyber-gold text-[8px]">★</span>

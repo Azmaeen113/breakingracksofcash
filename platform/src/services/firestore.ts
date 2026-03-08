@@ -47,6 +47,7 @@ export async function createUser(userId: string, data: Partial<UserData>): Promi
     referredBy: null,
     referralCount: 0,
     walletAddress: null,
+    nameChanged: false,
     createdAt: now,
     updatedAt: now,
     lastEnergyReset: now,
@@ -58,6 +59,23 @@ export async function createUser(userId: string, data: Partial<UserData>): Promi
 export async function updateUser(userId: string, data: Partial<UserData>): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await updateDoc(doc(db, 'users', userId), { ...data, updatedAt: serverTimestamp() } as any);
+}
+
+// ─── Change Username (one-time only) ────────────────
+
+export async function changeUsername(userId: string, newName: string): Promise<boolean> {
+  const user = await getUser(userId);
+  if (!user) throw new Error('User not found');
+  if (user.nameChanged) throw new Error('Name can only be changed once');
+  const trimmed = newName.trim();
+  if (trimmed.length < 2 || trimmed.length > 20) throw new Error('Name must be 2-20 characters');
+  await updateDoc(doc(db, 'users', userId), {
+    odl_first_name: trimmed,
+    odl_username: trimmed,
+    nameChanged: true,
+    updatedAt: serverTimestamp(),
+  });
+  return true;
 }
 
 // ─── Energy System ──────────────────────────────────

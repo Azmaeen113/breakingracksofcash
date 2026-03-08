@@ -30,6 +30,7 @@ export interface UserData {
   referredBy: string | null;
   referralCount: number;
   walletAddress: string | null;
+  nameChanged: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
   lastEnergyReset: Timestamp | null;
