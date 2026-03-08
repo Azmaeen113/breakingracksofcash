@@ -63,12 +63,28 @@ export async function updateUser(userId: string, data: Partial<UserData>): Promi
 
 // ─── Change Username (one-time only) ────────────────
 
+export async function isUsernameTaken(name: string, excludeUserId?: string): Promise<boolean> {
+  const q = query(
+    collection(db, 'users'),
+    where('odl_username', '==', name),
+    limit(1)
+  );
+  const snap = await getDocs(q);
+  if (snap.empty) return false;
+  // If the only match is the current user, it's fine
+  if (excludeUserId && snap.docs[0].id === excludeUserId) return false;
+  return true;
+}
+
 export async function changeUsername(userId: string, newName: string): Promise<boolean> {
   const user = await getUser(userId);
   if (!user) throw new Error('User not found');
   if (user.nameChanged) throw new Error('Name can only be changed once');
   const trimmed = newName.trim();
   if (trimmed.length < 2 || trimmed.length > 20) throw new Error('Name must be 2-20 characters');
+  // Check uniqueness
+  const taken = await isUsernameTaken(trimmed, userId);
+  if (taken) throw new Error('This name is already taken');
   await updateDoc(doc(db, 'users', userId), {
     odl_first_name: trimmed,
     odl_username: trimmed,

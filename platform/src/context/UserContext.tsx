@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import type { UserData, SeasonData } from '@/types';
-import { getUser, createUser, updateUser, checkAndResetEnergy, getActiveSeason } from '@/services/firestore';
+import { getUser, createUser, updateUser, checkAndResetEnergy, getActiveSeason, isUsernameTaken } from '@/services/firestore';
 import { getUserLeague } from '@/config/leagues';
 import { getVipMultiplier, getTapDamage } from '@/config/vipPlans';
 import type { League } from '@/types';
 import { generateRandomName } from '@/config/names';
+import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { auth } from '@/services/firebase';
 
 interface UserContextValue {
   user: UserData | null;
@@ -43,13 +45,36 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [season, setSeason] = useState<SeasonData | null>(null);
   const [onboarded, setOnboarded] = useState(() => localStorage.getItem('br4c_onboarded') === '1');
+  const [authReady, setAuthReady] = useState(false);
   const userId = useRef(getOrCreateUserId()).current;
+
+  // Sign in anonymously for Firestore permissions
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        setAuthReady(true);
+      } else {
+        signInAnonymously(auth).catch((err) => {
+          console.error('Anonymous sign-in failed:', err);
+          // Still allow the app to load even if auth fails
+          setAuthReady(true);
+        });
+      }
+    });
+    return unsub;
+  }, []);
 
   const refreshUser = useCallback(async () => {
     try {
       let userData = await getUser(userId);
       if (!userData) {
-        const randomName = generateRandomName();
+        // Generate a unique random name (retry up to 5 times on collision)
+        let randomName = generateRandomName();
+        for (let i = 0; i < 5; i++) {
+          const taken = await isUsernameTaken(randomName);
+          if (!taken) break;
+          randomName = generateRandomName();
+        }
         await createUser(userId, {
           odl_id: userId,
           odl_first_name: randomName,
@@ -78,10 +103,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   }, [userId]);
 
+  // Only load user data after Firebase Auth is ready
   useEffect(() => {
+    if (!authReady) return;
     refreshUser();
     getActiveSeason().then(setSeason).catch(() => setSeason(null));
-  }, [refreshUser]);
+  }, [authReady, refreshUser]);
 
   const handleSetOnboarded = (v: boolean) => {
     setOnboarded(v);
