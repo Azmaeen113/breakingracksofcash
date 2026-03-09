@@ -20,10 +20,11 @@ export default function VipPage() {
   const load = async () => {
     setLoading(true);
     try {
+      // Load each independently so one empty collection doesn't break everything
       const [vips, purchases, energy] = await Promise.all([
-        getActiveVipUsers(),
-        getAllVipPurchases(),
-        getAllEnergyPurchases(),
+        getActiveVipUsers().catch(() => []),
+        getAllVipPurchases().catch(() => []),
+        getAllEnergyPurchases().catch(() => []),
       ]);
       setVipUsers(vips);
       setVipPurchases(purchases);

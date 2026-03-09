@@ -204,9 +204,9 @@ export async function getAdminActions(maxCount = 100) {
 
 // ── Stats ─────────────────────────────────────────────────────
 export async function getDashboardStats() {
-  const userCount = await getTotalUserCount();
-  const pendingPayments = await getAllPaymentRequests('pending');
-  const vipUsers = await getActiveVipUsers();
+  const userCount = await getTotalUserCount().catch(() => 0);
+  const pendingPayments = await getAllPaymentRequests('pending').catch(() => []);
+  const vipUsers = await getActiveVipUsers().catch(() => []);
   
   // Get total cash in circulation
   const usersSnap = await getDocs(query(collection(db, 'users'), limit(1000)));

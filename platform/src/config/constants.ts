@@ -13,7 +13,7 @@ export const DAILY_REWARDS: DailyReward[] = [
 // TON receiver wallet for all payments
 export const TON_RECEIVER_WALLET = 'UQCbRCf4OS6zeo3HtwVlq9Sg6ahV72Ux4WqlPpcYLpNlUcyl';
 
-// EVM receiver wallet (ETH, BSC, PLS - all chains)
+// EVM receiver wallet (BSC — receives USDT BEP-20)
 export const EVM_RECEIVER_WALLET = '0x73F82ecf7345De5d4509be3b418818d00b2cBa1C';
 
 // Base energy per day (free users)

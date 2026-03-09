@@ -7,9 +7,20 @@ import { EVM_RECEIVER_WALLET, VIP_ENERGY_PER_DAY } from '@/config/constants';
 import type { VipPlan, EnergyOffer } from '@/types';
 import {
   FaCrown, FaBolt, FaGamepad, FaTimes, FaCheck, FaShoppingCart,
-  FaFire, FaStar, FaWallet, FaEthereum
+  FaFire, FaStar, FaWallet
 } from 'react-icons/fa';
 import toast from 'react-hot-toast';
+
+// BSC USDT (BEP-20) contract address
+const BSC_USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
+const BSC_CHAIN_ID = '0x38'; // 56 in hex
+
+// Minimal ERC-20 ABI for transfer
+const ERC20_ABI = [
+  'function transfer(address to, uint256 amount) returns (bool)',
+  'function balanceOf(address owner) view returns (uint256)',
+  'function decimals() view returns (uint8)',
+];
 
 // ─── EVM helpers using ethers.js ──────────────────────
 async function connectWallet(): Promise<{ provider: any; signer: any; address: string }> {
@@ -18,21 +29,44 @@ async function connectWallet(): Promise<{ provider: any; signer: any; address: s
   if (!ethereum) throw new Error('No wallet detected. Install MetaMask or another EVM wallet.');
   const provider = new BrowserProvider(ethereum);
   await provider.send('eth_requestAccounts', []);
-  const signer = await provider.getSigner();
+
+  // Switch to BSC if not already on it
+  try {
+    await ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: BSC_CHAIN_ID }] });
+  } catch (switchError: any) {
+    // If BSC is not added, add it
+    if (switchError.code === 4902) {
+      await ethereum.request({
+        method: 'wallet_addEthereumChain',
+        params: [{
+          chainId: BSC_CHAIN_ID,
+          chainName: 'BNB Smart Chain',
+          nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+          rpcUrls: ['https://bsc-dataseed.binance.org/'],
+          blockExplorerUrls: ['https://bscscan.com/'],
+        }],
+      });
+    } else {
+      throw switchError;
+    }
+  }
+
+  // Re-create provider after chain switch
+  const bscProvider = new BrowserProvider(ethereum);
+  const signer = await bscProvider.getSigner();
   const address = await signer.getAddress();
-  return { provider, signer, address };
+  return { provider: bscProvider, signer, address };
 }
 
-async function sendEvmPayment(amountUSD: number): Promise<string> {
-  const { parseEther } = await import('ethers');
+async function sendUsdtPayment(amountUSD: number): Promise<string> {
+  const { Contract, parseUnits } = await import('ethers');
   const { signer } = await connectWallet();
-  // Convert USD to ETH-equivalent (simplified: $1 ≈ 0.0004 ETH @ ~$2500)
-  // In production, use a price oracle. For now, send a small representative amount.
-  const ethAmount = (amountUSD * 0.0004).toFixed(6);
-  const tx = await signer.sendTransaction({
-    to: EVM_RECEIVER_WALLET,
-    value: parseEther(ethAmount),
-  });
+
+  // USDT BEP-20 on BSC: 18 decimals, 1 USDT = $1
+  const usdtContract = new Contract(BSC_USDT_ADDRESS, ERC20_ABI, signer);
+  const amount = parseUnits(amountUSD.toString(), 18);
+
+  const tx = await usdtContract.transfer(EVM_RECEIVER_WALLET, amount);
   await tx.wait();
   return tx.hash;
 }
@@ -53,7 +87,7 @@ export default function ShopPage() {
   const handlePurchaseVip = async (plan: VipPlan) => {
     setProcessing(true);
     try {
-      const txHash = await sendEvmPayment(plan.priceUSD);
+      const txHash = await sendUsdtPayment(plan.priceUSD);
       await activateVip(userId, plan.tier, plan.durationDays, txHash, plan.priceUSD);
       await refreshUser();
       toast.success(`VIP ${plan.name} activated!`);
@@ -75,7 +109,7 @@ export default function ShopPage() {
   const handlePurchaseEnergy = async (offer: EnergyOffer) => {
     setProcessing(true);
     try {
-      const txHash = await sendEvmPayment(offer.priceUSD);
+      const txHash = await sendUsdtPayment(offer.priceUSD);
       await purchaseExtraEnergy(userId, offer.id, txHash);
       await refreshUser();
       toast.success(`+${offer.energy} Energy added!`);
@@ -310,7 +344,7 @@ export default function ShopPage() {
           >
             <div className="flex items-center justify-between">
               <h3 className="font-orbitron text-sm text-white flex items-center gap-2">
-                <FaEthereum className="text-cyber-cyan" /> Pay with Wallet
+                <FaWallet className="text-cyber-cyan" /> Pay with USDT (BSC)
               </h3>
               <button onClick={() => !processing && setPaymentModal(null)} className="text-gray-500">
                 <FaTimes />
@@ -333,9 +367,9 @@ export default function ShopPage() {
 
             <div className="p-4 rounded-xl bg-cyber-dark border border-cyber-cyan/20 text-center space-y-2">
               <FaWallet className="text-3xl text-cyber-cyan mx-auto" />
-              <p className="text-xs text-white">EVM Wallet Payment</p>
+              <p className="text-xs text-white">USDT Payment on BSC</p>
               <p className="text-[10px] text-gray-500">
-                Supports ETH, BSC, PLS — connect MetaMask or any EVM wallet
+                Pay with USDT (BEP-20) on BNB Smart Chain via MetaMask or any wallet
               </p>
               <p className="text-[9px] text-gray-600 font-mono break-all mt-2">
                 {EVM_RECEIVER_WALLET}

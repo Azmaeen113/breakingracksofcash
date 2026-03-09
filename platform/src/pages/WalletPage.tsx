@@ -6,9 +6,11 @@ import { CASH_TO_TOKEN_RATE, EVM_RECEIVER_WALLET } from '@/config/constants';
 import type { TransactionData } from '@/types';
 import {
   FaWallet, FaArrowDown, FaArrowUp, FaCopy, FaCheck, FaHistory,
-  FaCoins, FaGem, FaExchangeAlt, FaEthereum, FaUnlink
+  FaCoins, FaGem, FaExchangeAlt, FaUnlink
 } from 'react-icons/fa';
 import toast from 'react-hot-toast';
+
+const BSC_CHAIN_ID = '0x38';
 
 export default function WalletPage() {
   const { user, userId, refreshUser } = useUser();
@@ -45,7 +47,27 @@ export default function WalletPage() {
       }
       const provider = new BrowserProvider(ethereum);
       await provider.send('eth_requestAccounts', []);
-      const signer = await provider.getSigner();
+
+      // Switch to BSC
+      try {
+        await ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: BSC_CHAIN_ID }] });
+      } catch (switchErr: any) {
+        if (switchErr.code === 4902) {
+          await ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: BSC_CHAIN_ID,
+              chainName: 'BNB Smart Chain',
+              nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+              rpcUrls: ['https://bsc-dataseed.binance.org/'],
+              blockExplorerUrls: ['https://bscscan.com/'],
+            }],
+          });
+        }
+      }
+
+      const bscProvider = new BrowserProvider(ethereum);
+      const signer = await bscProvider.getSigner();
       const address = await signer.getAddress();
       await updateUser(userId, { walletAddress: address });
       await refreshUser();
@@ -137,7 +159,7 @@ export default function WalletPage() {
             </button>
           </div>
           <div className="flex items-center gap-2">
-            <FaEthereum className="text-cyber-cyan flex-shrink-0" />
+            <FaWallet className="text-cyber-cyan flex-shrink-0" />
             <p className="text-xs text-gray-400 font-mono truncate flex-1">{user.walletAddress}</p>
             <button onClick={() => handleCopy(user.walletAddress!)}>
               {copied ? <FaCheck className="text-green-400" /> : <FaCopy className="text-gray-500" />}
@@ -152,10 +174,10 @@ export default function WalletPage() {
           className="glass-card p-5 space-y-4 border border-cyber-cyan/20"
         >
           <div className="text-center">
-            <FaEthereum className="text-cyber-cyan text-3xl mx-auto mb-2" />
-            <p className="font-orbitron text-xs text-white">Connect EVM Wallet</p>
+            <FaWallet className="text-cyber-cyan text-3xl mx-auto mb-2" />
+            <p className="font-orbitron text-xs text-white">Connect BSC Wallet</p>
             <p className="text-[10px] text-gray-500 mt-1">
-              Connect MetaMask or any EVM wallet to receive rewards
+              Connect MetaMask or any wallet on BNB Smart Chain
             </p>
           </div>
           <button
