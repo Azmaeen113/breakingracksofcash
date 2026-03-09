@@ -19,8 +19,12 @@ export const EVM_RECEIVER_WALLET = '0x73F82ecf7345De5d4509be3b418818d00b2cBa1C';
 // Base energy per day (free users)
 export const BASE_ENERGY_PER_DAY = 3;
 
-// Energy by VIP tier [free, bronze, silver, gold]
-export const VIP_ENERGY_PER_DAY = [3, 6, 13, 20];
+// BONUS energy by VIP tier [free, bronze, silver, gold]
+// Added ON TOP of league energy (not absolute)
+export const VIP_ENERGY_BONUS = [0, 5, 10, 20];
+
+// Max energy cap per day (Gold VIP)
+export const MAX_ENERGY_PER_DAY = 28;
 
 export const SEASON_PRIZES: PrizeTier[] = [
   { rankStart: 1,  rankEnd: 1,  prize: 1000 },
@@ -63,7 +67,7 @@ export const TAP_CYCLE_TOTAL = 2500;
 export const TAP_CYCLE_BONUS = 1000;
 export const TAP_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24h
 export const COOLDOWN_RESET_REDUCTION_MS = 12 * 60 * 60 * 1000; // 12h
-export const REFERRAL_REWARD = 1000;
-export const CASH_TO_TOKEN_RATE = 10; // 10 CASH = 1 token
+export const REFERRAL_REWARD = 25000; // 250 tokens at 100:1 ≈ $0.01 per referral
+export const CASH_TO_TOKEN_RATE = 100; // 100 CASH = 1 token
 export const MIN_WITHDRAWAL = 100;
 export const WITHDRAWAL_COOLDOWN_DAYS = 3;

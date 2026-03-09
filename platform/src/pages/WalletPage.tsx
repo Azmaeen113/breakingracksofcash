@@ -212,7 +212,7 @@ export default function WalletPage() {
       <div className="glass-card p-4 border border-gray-700/20">
         <p className="font-orbitron text-[10px] text-gray-500 tracking-widest mb-2">PAYMENT WALLET</p>
         <p className="text-[10px] text-gray-600 font-mono break-all">{EVM_RECEIVER_WALLET}</p>
-        <p className="text-[10px] text-gray-600 mt-1">Accepts ETH, BSC, PLS</p>
+        <p className="text-[10px] text-gray-600 mt-1">BSC · USDT (BEP-20)</p>
       </div>
 
       {/* Transaction History */}

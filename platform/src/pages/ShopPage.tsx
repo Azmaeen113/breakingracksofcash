@@ -3,7 +3,8 @@ import { motion } from 'framer-motion';
 import { useUser } from '@/context/UserContext';
 import { VIP_PLANS, ENERGY_OFFERS, getVipMultiplier, getTapDamage } from '@/config/vipPlans';
 import { activateVip, purchaseExtraEnergy, useCooldownReset } from '@/services/firestore';
-import { EVM_RECEIVER_WALLET, VIP_ENERGY_PER_DAY } from '@/config/constants';
+import { EVM_RECEIVER_WALLET, VIP_ENERGY_BONUS, MAX_ENERGY_PER_DAY } from '@/config/constants';
+import { getUserLeague } from '@/config/leagues';
 import type { VipPlan, EnergyOffer } from '@/types';
 import {
   FaCrown, FaBolt, FaGamepad, FaTimes, FaCheck, FaShoppingCart,
@@ -145,7 +146,9 @@ export default function ShopPage() {
   };
 
   const currentEnergy = user.gameEnergy || 0;
-  const dailyEnergy = VIP_ENERGY_PER_DAY[user.vipTier] ?? 3;
+  const leagueEnergy = getUserLeague(user.seasonCash).energyPerDay;
+  const vipBonus = VIP_ENERGY_BONUS[user.vipTier] ?? 0;
+  const dailyEnergy = Math.min(leagueEnergy + vipBonus, MAX_ENERGY_PER_DAY);
 
   return (
     <div className="px-4 pb-28 space-y-5">

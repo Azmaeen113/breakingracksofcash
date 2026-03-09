@@ -31,13 +31,19 @@ export default function UsersPage() {
   const handleSave = async () => {
     if (!editUser) return;
     try {
+      // Only include fields that were actually changed (prevents overwriting stale data)
       const updates: Record<string, any> = {};
-      if (editData.cashBalance !== undefined) updates.cashBalance = Number(editData.cashBalance);
-      if (editData.tokenBalance !== undefined) updates.tokenBalance = Number(editData.tokenBalance);
-      if (editData.gameEnergy !== undefined) updates.gameEnergy = Number(editData.gameEnergy);
-      if (editData.vipTier !== undefined) updates.vipTier = Number(editData.vipTier);
-      if (editData.cooldownResets !== undefined) updates.cooldownResets = Number(editData.cooldownResets);
-      
+      const fields = ['cashBalance', 'tokenBalance', 'gameEnergy', 'vipTier', 'cooldownResets'];
+      for (const key of fields) {
+        if (editData[key] !== undefined && String(editData[key]) !== String(editUser[key] ?? '')) {
+          updates[key] = Number(editData[key]);
+        }
+      }
+      if (Object.keys(updates).length === 0) {
+        toast('No changes detected');
+        setEditUser(null);
+        return;
+      }
       await adminUpdateUser(editUser.id, updates);
       toast.success('User updated');
       setEditUser(null);
