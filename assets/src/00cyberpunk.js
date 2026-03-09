@@ -270,9 +270,9 @@ if (RACK_ATTACK) {
       return;
     }
 
-    // ANY non-cue ball potted: add +3 seconds to timer
+    // ANY non-cue ball potted: add +5 seconds to timer
     if (evt.collisionType === 'pocket' && ball.id !== 0 && !raGameEnded && raTimerStarted) {
-      raStartTime += 3000;
+      raStartTime += 5000;
     }
 
     // 8-BALL potted: award points normally, no game-over
@@ -379,6 +379,13 @@ if (RACK_ATTACK) {
       if (gi.turnArrow2) gi.turnArrow2.frame = 0;
     }
 
+    // If engine set cueBallInHand due to a foul (not a scratch/pocket),
+    // clear it so the cue ball stays where it stopped.
+    // ballArray[0].active is false only when cue ball was actually pocketed.
+    if (gi.cueBallInHand && gi.ballArray[0] && gi.ballArray[0].active && gi.shotNum > 0 && !gi.shotRunning) {
+      gi.cueBallInHand = false;
+    }
+
     // If a foul was flagged (miss, cushion rule, etc.),
     // dismiss the foul window AND properly reset the shot state.
     if (gi.fouled && !raGameEnded) {
@@ -437,6 +444,15 @@ if (RACK_ATTACK) {
         gi.ballArray[0].pocketTweenComplete !== false &&
         !gi.cueBallInHand && !gi.shotRunning && !gi.gameOver) {
       gi.cueBallInHand = true;
+    }
+
+    // After scratch: place cue ball at break position instead of center (0,0)
+    if (gi.cueBallInHand && gi.placedInCenter && gi.ballArray[0] && !gi.shotRunning) {
+      var cb = gi.ballArray[0];
+      cb.position.x = -15000 * gi.adjustmentScale;
+      cb.position.y = 0;
+      if (cb.mover) cb.mover.visible = false;
+      renderScreen();
     }
   };
 }
