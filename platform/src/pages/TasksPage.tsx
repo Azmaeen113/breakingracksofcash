@@ -4,13 +4,15 @@ import { useUser } from '@/context/UserContext';
 import { TASKS } from '@/config/tasks';
 import { completeTask } from '@/services/firestore';
 import {
-  FaUsers, FaCheck, FaExternalLinkAlt, FaCoins, FaWallet
+  FaUsers, FaCheck, FaExternalLinkAlt, FaCoins, FaWallet, FaTelegramPlane, FaTwitter
 } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 
 const ICON_MAP: Record<string, React.ComponentType<any>> = {
   users: FaUsers,
   wallet: FaWallet,
+  telegram: FaTelegramPlane,
+  twitter: FaTwitter,
 };
 
 export default function TasksPage() {

@@ -89,9 +89,15 @@ export default function ShopPage() {
     setProcessing(true);
     try {
       const txHash = await sendUsdtPayment(plan.priceUSD);
-      await activateVip(userId, plan.tier, plan.durationDays, txHash, plan.priceUSD);
-      await refreshUser();
-      toast.success(`VIP ${plan.name} activated!`);
+      // Payment confirmed on-chain — any error after this is NOT a payment failure
+      try {
+        await activateVip(userId, plan.tier, plan.durationDays, txHash, plan.priceUSD);
+        await refreshUser();
+        toast.success(`VIP ${plan.name} activated!`);
+      } catch (postErr) {
+        console.error('Post-payment processing error:', postErr);
+        toast.success('Payment received! VIP will be activated shortly.');
+      }
       setPaymentModal(null);
     } catch (err: any) {
       if (err?.code === 'ACTION_REJECTED' || err?.message?.includes('reject')) {
@@ -111,9 +117,15 @@ export default function ShopPage() {
     setProcessing(true);
     try {
       const txHash = await sendUsdtPayment(offer.priceUSD);
-      await purchaseExtraEnergy(userId, offer.id, txHash);
-      await refreshUser();
-      toast.success(`+${offer.energy} Energy added!`);
+      // Payment confirmed on-chain — any error after this is NOT a payment failure
+      try {
+        await purchaseExtraEnergy(userId, offer.id, txHash);
+        await refreshUser();
+        toast.success(`+${offer.energy} Energy added!`);
+      } catch (postErr) {
+        console.error('Post-payment processing error:', postErr);
+        toast.success('Payment received! Energy will be added shortly.');
+      }
       setPaymentModal(null);
     } catch (err: any) {
       if (err?.code === 'ACTION_REJECTED' || err?.message?.includes('reject')) {

@@ -210,6 +210,7 @@ if (RACK_ATTACK) {
   var raStartTime = 0;
   var raTimerStarted = false;
   var raGameEnded = false;
+  var raPausedAt = 0;
 
   window._origStartTimer = window.startTimer;
   window.startTimer = function() {
@@ -267,6 +268,11 @@ if (RACK_ATTACK) {
       }
       gi.cueBallInHand = true;
       return;
+    }
+
+    // ANY non-cue ball potted: add +3 seconds to timer
+    if (evt.collisionType === 'pocket' && ball.id !== 0 && !raGameEnded && raTimerStarted) {
+      raStartTime += 3000;
     }
 
     // 8-BALL potted: award points normally, no game-over
@@ -352,6 +358,18 @@ if (RACK_ATTACK) {
 
     if (!gi) return;
 
+    // ── Handle pause: freeze timer while pause menu is visible ──
+    if (gi.popUpPanel && gi.popUpPanel.visible) {
+      if (raPausedAt === 0 && raTimerStarted) {
+        raPausedAt = Date.now();
+      }
+      return; // skip Rack Attack fix-up logic while paused
+    }
+    if (raPausedAt > 0 && raTimerStarted) {
+      raStartTime += (Date.now() - raPausedAt);
+      raPausedAt = 0;
+    }
+
     // ── AFTER original update: fix up any issues ──
 
     // Force turn to p1 (the rulings may have switched it to p2)
@@ -366,7 +384,8 @@ if (RACK_ATTACK) {
     if (gi.fouled && !raGameEnded) {
       gi.fouled = false;
       gi.scratched = false;
-      gi.cueBallInHand = true;
+      // Don't set cueBallInHand: cue ball stays where it landed on miss.
+      // cueBallInHand is only set by rackAttackOnContact when cue ball is pocketed.
       gi.rerack = false;
 
       if (gi.foulWindow && gi.foulWindow.visible) {
@@ -393,8 +412,9 @@ if (RACK_ATTACK) {
       gi.foulDisplayComplete = true;
     }
 
-    // Safety: ensure gameRunning is true when not in game-over
-    if (!gi.gameRunning && !gi.gameOver && !raGameEnded && !gi.shotRunning) {
+    // Safety: ensure gameRunning is true when not in game-over and not paused
+    if (!gi.gameRunning && !gi.gameOver && !raGameEnded && !gi.shotRunning &&
+        !(gi.popUpPanel && gi.popUpPanel.visible)) {
       gi.gameRunning = true;
     }
 
