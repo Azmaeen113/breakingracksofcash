@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getAllUsers, searchUsers, adminUpdateUser, adminDeleteUser } from '@/services/adminFirestore';
-import { FaSearch, FaEdit, FaTrash, FaTimes, FaSave, FaCoins, FaCrown } from 'react-icons/fa';
+import { FaSearch, FaEdit, FaTrash, FaTimes, FaSave, FaCoins, FaCrown, FaCopy, FaWallet } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 
 export default function UsersPage() {
@@ -96,6 +96,7 @@ export default function UsersPage() {
                 <th className="py-3 px-2">Games</th>
                 <th className="py-3 px-2">VIP</th>
                 <th className="py-3 px-2">Energy</th>
+                <th className="py-3 px-2">Wallet</th>
                 <th className="py-3 px-2">Actions</th>
               </tr>
             </thead>
@@ -117,6 +118,22 @@ export default function UsersPage() {
                     )}
                   </td>
                   <td className="py-3 px-2 text-xs text-gray-400">{u.gameEnergy || 0}</td>
+                  <td className="py-3 px-2">
+                    {u.walletAddress ? (
+                      <div className="flex items-center gap-1">
+                        <span className="font-mono text-[10px] text-yellow-400">{u.walletAddress.slice(0, 6)}...{u.walletAddress.slice(-4)}</span>
+                        <button
+                          onClick={() => { navigator.clipboard.writeText(u.walletAddress); toast.success('Copied!'); }}
+                          className="p-1 rounded hover:bg-white/10 text-gray-500 hover:text-white"
+                          title={u.walletAddress}
+                        >
+                          <FaCopy className="text-[10px]" />
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-gray-600 text-xs">—</span>
+                    )}
+                  </td>
                   <td className="py-3 px-2">
                     <div className="flex items-center gap-1">
                       <button onClick={() => { setEditUser(u); setEditData(u); }} className="p-1.5 rounded hover:bg-white/10 text-gray-400">
