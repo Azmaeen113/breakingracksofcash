@@ -348,12 +348,15 @@ export async function createPaymentRequest(userId: string, amount: number, walle
   const recentQ = query(
     collection(db, 'paymentRequests'),
     where('userId', '==', userId),
-    orderBy('createdAt', 'desc'),
-    limit(1)
+    limit(20)
   );
   const recent = await getDocs(recentQ);
   if (!recent.empty) {
-    const last = recent.docs[0].data();
+    // Find the most recent request client-side
+    const sorted = recent.docs
+      .map(d => d.data())
+      .sort((a: any, b: any) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+    const last = sorted[0];
     const daysSince = (Date.now() - last.createdAt.toMillis()) / (1000 * 60 * 60 * 24);
     if (daysSince < WITHDRAWAL_COOLDOWN_DAYS) {
       throw new Error(`Please wait ${WITHDRAWAL_COOLDOWN_DAYS} days between withdrawals`);
@@ -375,9 +378,15 @@ export async function createPaymentRequest(userId: string, amount: number, walle
 }
 
 export async function getUserPaymentRequests(userId: string): Promise<PaymentRequest[]> {
-  const q = query(collection(db, 'paymentRequests'), where('userId', '==', userId), orderBy('createdAt', 'desc'));
+  const q = query(collection(db, 'paymentRequests'), where('userId', '==', userId), limit(50));
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as PaymentRequest));
+  const results = snap.docs.map(d => ({ id: d.id, ...d.data() } as PaymentRequest));
+  results.sort((a: any, b: any) => {
+    const aTime = a.createdAt?.toMillis?.() || 0;
+    const bTime = b.createdAt?.toMillis?.() || 0;
+    return bTime - aTime;
+  });
+  return results;
 }
 
 // ─── VIP ────────────────────────────────────────────
@@ -455,9 +464,14 @@ export async function getUserTransactions(userId: string, count = 50): Promise<T
   const q = query(
     collection(db, 'transactions'),
     where('userId', '==', userId),
-    orderBy('createdAt', 'desc'),
     limit(count)
   );
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as TransactionData));
+  const results = snap.docs.map(d => ({ id: d.id, ...d.data() } as TransactionData));
+  results.sort((a: any, b: any) => {
+    const aTime = a.createdAt?.toMillis?.() || 0;
+    const bTime = b.createdAt?.toMillis?.() || 0;
+    return bTime - aTime;
+  });
+  return results;
 }
