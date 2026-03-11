@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { getAllUsers, searchUsers, adminUpdateUser, adminDeleteUser } from '@/services/adminFirestore';
-import { FaSearch, FaEdit, FaTrash, FaTimes, FaSave, FaCoins, FaCrown, FaCopy, FaWallet } from 'react-icons/fa';
+import { getAllUsers, searchUsers, adminUpdateUser, adminDeleteUser, getUserPaymentRequests, getUserEnergyPurchases, getUserVipPurchases, getUserTransactions } from '@/services/adminFirestore';
+import { FaSearch, FaEdit, FaTrash, FaTimes, FaSave, FaCoins, FaCrown, FaCopy, FaWallet, FaEye, FaBolt, FaExchangeAlt } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 
 export default function UsersPage() {
@@ -9,6 +9,13 @@ export default function UsersPage() {
   const [search, setSearch] = useState('');
   const [editUser, setEditUser] = useState<any>(null);
   const [editData, setEditData] = useState<Record<string, any>>({});
+  const [detailUser, setDetailUser] = useState<any>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailTab, setDetailTab] = useState<'wallet' | 'payments' | 'energy' | 'vip' | 'transactions'>('wallet');
+  const [userPayments, setUserPayments] = useState<any[]>([]);
+  const [userEnergy, setUserEnergy] = useState<any[]>([]);
+  const [userVip, setUserVip] = useState<any[]>([]);
+  const [userTxns, setUserTxns] = useState<any[]>([]);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -64,6 +71,27 @@ export default function UsersPage() {
     }
   };
 
+  const openUserDetail = async (user: any) => {
+    setDetailUser(user);
+    setDetailTab('wallet');
+    setDetailLoading(true);
+    try {
+      const [payments, energy, vip, txns] = await Promise.all([
+        getUserPaymentRequests(user.id),
+        getUserEnergyPurchases(user.id),
+        getUserVipPurchases(user.id),
+        getUserTransactions(user.id),
+      ]);
+      setUserPayments(payments);
+      setUserEnergy(energy);
+      setUserVip(vip);
+      setUserTxns(txns);
+    } catch {
+      toast.error('Failed to load user details');
+    }
+    setDetailLoading(false);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -111,7 +139,13 @@ export default function UsersPage() {
                 <tr key={u.id} className="border-b border-admin-border/50 hover:bg-white/5">
                   <td className="py-3 px-2">
                     <p className="text-white text-xs font-medium">{u.odl_first_name || 'Player'}</p>
-                    <p className="text-gray-600 text-[10px] font-mono">{u.id.slice(0, 16)}...</p>
+                    <button
+                      onClick={() => openUserDetail(u)}
+                      className="text-cyan-400 hover:text-cyan-300 text-[10px] font-mono hover:underline cursor-pointer"
+                      title="View wallet &amp; payment details"
+                    >
+                      {u.id.slice(0, 16)}...
+                    </button>
                   </td>
                   <td className="py-3 px-2 font-mono text-xs text-green-400">{(u.cashBalance || 0).toLocaleString()}</td>
                   <td className="py-3 px-2 font-mono text-xs text-cyan-400">{(u.tokenBalance || 0).toFixed(2)}</td>
@@ -193,6 +227,178 @@ export default function UsersPage() {
                 <FaSave className="text-xs" /> Save
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Detail / Wallet & Airdrop Modal */}
+      {detailUser && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setDetailUser(null)}>
+          <div className="admin-card w-full max-w-2xl max-h-[85vh] overflow-y-auto space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold flex items-center gap-2">
+                <FaEye className="text-cyan-400" /> Player Detail
+              </h2>
+              <button onClick={() => setDetailUser(null)}><FaTimes className="text-gray-500" /></button>
+            </div>
+
+            {/* Player info header */}
+            <div className="p-3 rounded-lg bg-white/5 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-white font-medium text-sm">{detailUser.odl_first_name || 'Player'}</p>
+                  <p className="text-gray-500 text-[10px]">@{detailUser.odl_username || 'unknown'}</p>
+                </div>
+                <div className="text-right text-xs text-gray-400">
+                  <p>Cash: <span className="text-green-400 font-mono">{(detailUser.cashBalance || 0).toLocaleString()}</span></p>
+                  <p>Tokens: <span className="text-cyan-400 font-mono">{(detailUser.tokenBalance || 0).toFixed(2)}</span></p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] text-gray-500">ID:</span>
+                <span className="font-mono text-[10px] text-gray-400">{detailUser.id}</span>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(detailUser.id); toast.success('ID copied!'); }}
+                  className="p-0.5 rounded hover:bg-white/10 text-gray-600 hover:text-white"
+                >
+                  <FaCopy className="text-[8px]" />
+                </button>
+              </div>
+            </div>
+
+            {/* Wallet / Airdrop Section */}
+            <div className="p-3 rounded-lg bg-white/5 border border-yellow-500/20 space-y-2">
+              <p className="text-xs text-yellow-400 font-bold flex items-center gap-1">
+                <FaWallet /> Wallet (for Airdrops)
+              </p>
+              {detailUser.walletAddress ? (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs text-yellow-300 break-all">{detailUser.walletAddress}</span>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(detailUser.walletAddress); toast.success('Wallet copied!'); }}
+                      className="p-1 rounded hover:bg-white/10 text-gray-500 hover:text-white flex-shrink-0"
+                    >
+                      <FaCopy className="text-xs" />
+                    </button>
+                  </div>
+                  <a
+                    href={`https://bscscan.com/address/${detailUser.walletAddress}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-cyan-400 hover:underline"
+                  >
+                    View on BscScan →
+                  </a>
+                </div>
+              ) : (
+                <p className="text-gray-600 text-xs">No wallet connected</p>
+              )}
+            </div>
+
+            {/* Tabs */}
+            <div className="flex gap-1 text-[10px]">
+              {([
+                { key: 'payments', label: 'Withdrawals', icon: FaCoins },
+                { key: 'energy', label: 'Energy Buys', icon: FaBolt },
+                { key: 'vip', label: 'VIP Purchases', icon: FaCrown },
+                { key: 'transactions', label: 'Transactions', icon: FaExchangeAlt },
+              ] as const).map(t => (
+                <button
+                  key={t.key}
+                  onClick={() => setDetailTab(t.key)}
+                  className={`flex items-center gap-1 px-2 py-1.5 rounded-lg ${
+                    detailTab === t.key
+                      ? 'bg-admin-accent/20 text-admin-accent border border-admin-accent/30'
+                      : 'bg-white/5 text-gray-500 border border-transparent'
+                  }`}
+                >
+                  <t.icon className="text-[8px]" /> {t.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Tab Content */}
+            {detailLoading ? (
+              <div className="text-center py-6">
+                <div className="w-5 h-5 border-2 border-admin-accent/30 border-t-admin-accent rounded-full animate-spin mx-auto" />
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {detailTab === 'payments' && (
+                  userPayments.length === 0 ? (
+                    <p className="text-gray-600 text-xs text-center py-4">No withdrawal requests</p>
+                  ) : (
+                    userPayments.map((p: any) => (
+                      <div key={p.id} className="p-2 rounded-lg bg-white/5 text-xs flex items-center justify-between">
+                        <div>
+                          <p className="text-white">{p.amount} tokens</p>
+                          <p className="text-[10px] text-gray-500 font-mono">{p.walletAddress?.slice(0, 10)}...{p.walletAddress?.slice(-6)}</p>
+                          <p className="text-[10px] text-gray-600">{p.createdAt?.toDate?.()?.toLocaleString?.() || '—'}</p>
+                        </div>
+                        <span className={`text-[10px] px-2 py-0.5 rounded ${
+                          p.status === 'approved' ? 'bg-green-500/20 text-green-400' :
+                          p.status === 'rejected' ? 'bg-red-500/20 text-red-400' :
+                          'bg-yellow-500/20 text-yellow-400'
+                        }`}>{p.status}</span>
+                      </div>
+                    ))
+                  )
+                )}
+
+                {detailTab === 'energy' && (
+                  userEnergy.length === 0 ? (
+                    <p className="text-gray-600 text-xs text-center py-4">No energy purchases</p>
+                  ) : (
+                    userEnergy.map((e: any) => (
+                      <div key={e.id} className="p-2 rounded-lg bg-white/5 text-xs flex items-center justify-between">
+                        <div>
+                          <p className="text-white">+{e.energy} energy — ${e.amountUSD}</p>
+                          <p className="text-[10px] text-gray-500 font-mono">{e.txHash?.slice(0, 16)}...</p>
+                          <p className="text-[10px] text-gray-600">{e.purchasedAt?.toDate?.()?.toLocaleString?.() || '—'}</p>
+                        </div>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-green-500/20 text-green-400">{e.status}</span>
+                      </div>
+                    ))
+                  )
+                )}
+
+                {detailTab === 'vip' && (
+                  userVip.length === 0 ? (
+                    <p className="text-gray-600 text-xs text-center py-4">No VIP purchases</p>
+                  ) : (
+                    userVip.map((v: any) => (
+                      <div key={v.id} className="p-2 rounded-lg bg-white/5 text-xs flex items-center justify-between">
+                        <div>
+                          <p className="text-white">VIP Tier {v.tier} — ${v.amountUSD}</p>
+                          <p className="text-[10px] text-gray-500 font-mono">{v.txHash?.slice(0, 16)}...</p>
+                          <p className="text-[10px] text-gray-600">{v.purchasedAt?.toDate?.()?.toLocaleString?.() || '—'}</p>
+                        </div>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-green-500/20 text-green-400">{v.status}</span>
+                      </div>
+                    ))
+                  )
+                )}
+
+                {detailTab === 'transactions' && (
+                  userTxns.length === 0 ? (
+                    <p className="text-gray-600 text-xs text-center py-4">No transactions</p>
+                  ) : (
+                    userTxns.map((t: any) => (
+                      <div key={t.id} className="p-2 rounded-lg bg-white/5 text-xs flex items-center justify-between">
+                        <div>
+                          <p className="text-white">{t.description}</p>
+                          <p className="text-[10px] text-gray-600">{t.createdAt?.toDate?.()?.toLocaleString?.() || '—'}</p>
+                        </div>
+                        <span className={`font-mono text-xs ${t.type === 'credit' ? 'text-green-400' : 'text-red-400'}`}>
+                          {t.type === 'credit' ? '+' : '-'}{t.amount?.toLocaleString?.() || t.amount}
+                        </span>
+                      </div>
+                    ))
+                  )
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

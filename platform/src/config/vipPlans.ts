@@ -40,8 +40,6 @@ export const ENERGY_OFFERS: EnergyOffer[] = [
   { id: 'energy_5',  energy: 5,   priceUSD: 0.5 },
   { id: 'energy_10', energy: 10,  priceUSD: 1 },
   { id: 'energy_25', energy: 25,  priceUSD: 2.5 },
-  { id: 'energy_50', energy: 50,  priceUSD: 5 },
-  { id: 'energy_100', energy: 100, priceUSD: 10 },
 ];
 
 export function getVipMultiplier(tier: number): number {

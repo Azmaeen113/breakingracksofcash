@@ -211,9 +211,18 @@ if (RACK_ATTACK) {
   var raTimerStarted = false;
   var raGameEnded = false;
   var raPausedAt = 0;
+  var raPreservingTimer = false;  // true during rack reset to prevent timer reset
+  var raRacksCleared = 0;        // count of racks completed
 
   window._origStartTimer = window.startTimer;
   window.startTimer = function() {
+    if (raPreservingTimer) {
+      // Rack reset: keep the current timer running, don't reset raStartTime
+      raPreservingTimer = false;
+      raTimerStarted = true;
+      playState.gameInfo.time = 0;
+      return;
+    }
     raStartTime = Date.now();
     raTimerStarted = true;
     playState.gameInfo.time = 0;
@@ -238,6 +247,26 @@ if (RACK_ATTACK) {
       gi.winner = 'p1';
       gi.foulDisplayComplete = true;
     }
+  };
+
+  // ── Override checkLevelComplete: Rack Attack needs ALL balls (including 8-ball) cleared ──
+  var _origCheckLevelComplete = checkLevelComplete;
+  checkLevelComplete = function() {
+    var gi = playState.gameInfo;
+    if (gi.numBalls <= 0 && !raGameEnded) {
+      // All 15 balls cleared including 8-ball → reset rack, +20 seconds
+      raRacksCleared++;
+      raPreservingTimer = true;
+      raStartTime += 20000; // +20 seconds bonus
+      raPausedAt = 0;
+      projectInfo.levelComplete = true;
+      // Brief delay so pocket animation finishes, then re-rack
+      game.time.events.add(1.5 * Phaser.Timer.SECOND, function() {
+        game.state.start('play');
+      }, this);
+    }
+    // Don't call original — it would set levelComplete at numBalls<=1
+    // In Rack Attack, we only complete when numBalls<=0
   };
 
   // ── Custom contact handler for Rack Attack ──
@@ -275,8 +304,35 @@ if (RACK_ATTACK) {
       raStartTime += 5000;
     }
 
-    // 8-BALL potted: award points normally, no game-over
+    // 8-BALL potted: if other balls remain → game over; if last ball → award + rack reset
     if (evt.collisionType === 'pocket' && ball.id === 8) {
+      // Check if 8-ball is the LAST ball (numBalls == 1 means only 8-ball was left)
+      if (gi.numBalls > 1) {
+        // 8-ball potted EARLY — game over!
+        ball.active = false;
+        ball.velocity = new Vector2D(0, 0);
+        var info8e = new Object();
+        info8e.position = ball.position;
+        info8e.targetPosition = evt.target.position;
+        info8e.velocity = evt.ballVelocity;
+        info8e.collisionType = 'pocket';
+        info8e.screw = ball.screw;
+        info8e.type = 'pocket';
+        ball.contactArray.push(info8e);
+        if (!gi.trial) {
+          playPocketSound(evt);
+          playPocketAnimation(evt);
+        }
+        raGameEnded = true;
+        gi.time = 180 * 60;
+        projectInfo.aiRating = 0;
+        gi.gameOver = true;
+        gi.winner = 'p1';
+        gi.foulDisplayComplete = true;
+        return;
+      }
+
+      // 8-ball is the LAST ball — award points, then checkLevelComplete triggers rack reset
       ball.active = false;
       ball.velocity = new Vector2D(0, 0);
       var info2 = new Object();
@@ -324,9 +380,27 @@ if (RACK_ATTACK) {
     if (gi.aiIcon) gi.aiIcon.visible = false;
     if (gi.turnArrow2) gi.turnArrow2.visible = false;
     if (gi.timerText) { gi.timerText.visible = true; gi.timerText.text = '1:30'; }
-    raTimerStarted = false;
-    raGameEnded = false;
-    raStartTime = 0;
+
+    if (raPreservingTimer) {
+      // Rack reset: keep timer running, only reset game-ended flag
+      raGameEnded = false;
+      raPausedAt = 0;
+      // Show remaining time immediately
+      if (gi.timerText && raTimerStarted) {
+        var elapsed = (Date.now() - raStartTime) / 1000;
+        var remaining = Math.max(0, Math.ceil(RA_TIME_LIMIT - elapsed));
+        var mins = Math.floor(remaining / 60);
+        var secs = remaining % 60;
+        gi.timerText.text = mins + ':' + (secs < 10 ? '0' : '') + secs;
+      }
+    } else {
+      // Fresh game: full reset
+      raTimerStarted = false;
+      raGameEnded = false;
+      raStartTime = 0;
+      raPausedAt = 0;
+      raRacksCleared = 0;
+    }
 
     // CRITICAL: Replace the contact event listener on the Phaser.Signal.
     // 14setup.js does: this.contactEvent = new Phaser.Signal;
@@ -425,7 +499,7 @@ if (RACK_ATTACK) {
       gi.gameRunning = true;
     }
 
-    // Only the 90-s timer should cause game-over; cancel anything else
+    // Only the 90-s timer or early 8-ball should cause game-over; cancel anything else
     if (gi.gameOver && !raGameEnded) {
       gi.gameOver = false;
       gi.winner = undefined;
@@ -437,6 +511,21 @@ if (RACK_ATTACK) {
       gi.shotReset = true;
       gi.initVars = false;
       gi.shotComplete = false;
+    }
+
+    // Prevent engine from freezing on levelComplete during rack-reset transition
+    if (projectInfo.levelComplete && !raGameEnded) {
+      // The rack-reset timer is ticking; keep timer updating
+      if (raTimerStarted) {
+        updateTimer();
+      }
+    }
+
+    // Safety: ensure cue stick stays visible when game is running (not game-over)
+    if (!gi.gameOver && !raGameEnded && !gi.shotRunning &&
+        !(gi.popUpPanel && gi.popUpPanel.visible)) {
+      if (gi.cueBaseCanvas && !gi.cueBaseCanvas.visible) gi.cueBaseCanvas.visible = true;
+      if (gi.guideCanvas && !gi.guideCanvas.visible) gi.guideCanvas.visible = true;
     }
 
     // Safety: if cue ball is inactive after animation done, ensure ball-in-hand

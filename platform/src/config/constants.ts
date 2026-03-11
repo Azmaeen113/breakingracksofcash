@@ -67,7 +67,7 @@ export const TAP_CYCLE_TOTAL = 2500;
 export const TAP_CYCLE_BONUS = 1000;
 export const TAP_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24h
 export const COOLDOWN_RESET_REDUCTION_MS = 12 * 60 * 60 * 1000; // 12h
-export const REFERRAL_REWARD = 25000; // 250 tokens at 100:1 ≈ $0.01 per referral
+export const REFERRAL_REWARD = 250; // 250 CASH per referral
 export const CASH_TO_TOKEN_RATE = 100; // 100 CASH = 1 token
 export const MIN_WITHDRAWAL = 100;
 export const WITHDRAWAL_COOLDOWN_DAYS = 3;

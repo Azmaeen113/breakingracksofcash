@@ -309,7 +309,7 @@ export default function ShopPage() {
       ) : (
         /* Energy Offers tab */
         <div className="space-y-3">
-          <p className="text-xs text-gray-500 text-center">Buy extra energy to play more games today</p>
+          <p className="text-xs text-gray-500 text-center">1-day top-ups — use within 24hrs or they reset!</p>
 
           {ENERGY_OFFERS.map((offer, idx) => (
             <motion.div
@@ -320,21 +320,17 @@ export default function ShopPage() {
               className="glass-card p-4 flex items-center gap-4"
             >
               <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                offer.energy >= 100 ? 'bg-cyber-gold/10' :
-                offer.energy >= 50 ? 'bg-cyber-pink/10' :
                 offer.energy >= 25 ? 'bg-purple-500/10' : 'bg-cyber-cyan/10'
               }`}>
                 <div className="text-center">
                   <FaGamepad className={`text-lg mx-auto ${
-                    offer.energy >= 100 ? 'text-cyber-gold' :
-                    offer.energy >= 50 ? 'text-cyber-pink' :
                     offer.energy >= 25 ? 'text-purple-400' : 'text-cyber-cyan'
                   }`} />
                 </div>
               </div>
               <div className="flex-1">
                 <p className="font-orbitron text-sm text-white">+{offer.energy} Energy</p>
-                <p className="text-[10px] text-gray-500">Play {offer.energy} more games</p>
+                <p className="text-[10px] text-yellow-400">24hr top-up — play {offer.energy} more games today</p>
               </div>
               <button
                 onClick={() => setPaymentModal({ type: 'energy', offer })}

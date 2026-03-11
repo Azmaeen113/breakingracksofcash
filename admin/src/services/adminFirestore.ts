@@ -202,6 +202,63 @@ export async function getAdminActions(maxCount = 100) {
   return results;
 }
 
+// ── User-specific payment / purchase lookups (for Airdrop cross-reference) ──
+export async function getUserPaymentRequests(userId: string) {
+  const q = query(collection(db, 'paymentRequests'), limit(500));
+  const snap = await getDocs(q);
+  const results = snap.docs
+    .map(d => ({ id: d.id, ...d.data() } as any))
+    .filter((r: any) => r.userId === userId);
+  results.sort((a: any, b: any) => {
+    const aTime = a.createdAt?.toMillis?.() || 0;
+    const bTime = b.createdAt?.toMillis?.() || 0;
+    return bTime - aTime;
+  });
+  return results;
+}
+
+export async function getUserEnergyPurchases(userId: string) {
+  const q = query(collection(db, 'energyPurchases'), limit(500));
+  const snap = await getDocs(q);
+  const results = snap.docs
+    .map(d => ({ id: d.id, ...d.data() } as any))
+    .filter((r: any) => r.userId === userId);
+  results.sort((a: any, b: any) => {
+    const aTime = a.purchasedAt?.toMillis?.() || 0;
+    const bTime = b.purchasedAt?.toMillis?.() || 0;
+    return bTime - aTime;
+  });
+  return results;
+}
+
+export async function getUserVipPurchases(userId: string) {
+  const q = query(collection(db, 'vipPurchases'), limit(500));
+  const snap = await getDocs(q);
+  const results = snap.docs
+    .map(d => ({ id: d.id, ...d.data() } as any))
+    .filter((r: any) => r.userId === userId);
+  results.sort((a: any, b: any) => {
+    const aTime = a.purchasedAt?.toMillis?.() || 0;
+    const bTime = b.purchasedAt?.toMillis?.() || 0;
+    return bTime - aTime;
+  });
+  return results;
+}
+
+export async function getUserTransactions(userId: string, maxCount = 50) {
+  const q = query(collection(db, 'transactions'), limit(500));
+  const snap = await getDocs(q);
+  const results = snap.docs
+    .map(d => ({ id: d.id, ...d.data() } as any))
+    .filter((r: any) => r.userId === userId);
+  results.sort((a: any, b: any) => {
+    const aTime = a.createdAt?.toMillis?.() || 0;
+    const bTime = b.createdAt?.toMillis?.() || 0;
+    return bTime - aTime;
+  });
+  return results.slice(0, maxCount);
+}
+
 // ── Stats ─────────────────────────────────────────────────────
 export async function getDashboardStats() {
   const userCount = await getTotalUserCount().catch(() => 0);
