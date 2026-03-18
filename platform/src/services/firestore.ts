@@ -104,11 +104,15 @@ export async function checkAndResetEnergy(userId: string, user: UserData): Promi
     const vipBonus = VIP_ENERGY_BONUS[user.vipTier] ?? 0;
     const league = getUserLeague(user.seasonCash);
     const dailyEnergy = Math.min(league.energyPerDay + vipBonus, MAX_ENERGY_PER_DAY);
+    // Preserve purchased energy: if user has more energy than daily base,
+    // keep the higher value (they likely bought extra energy yesterday)
+    const currentEnergy = user.gameEnergy ?? 0;
+    const finalEnergy = Math.max(dailyEnergy, currentEnergy);
     await updateUser(userId, {
-      gameEnergy: dailyEnergy,
+      gameEnergy: finalEnergy,
       lastEnergyReset: Timestamp.now(),
     } as any);
-    return dailyEnergy;
+    return finalEnergy;
   }
   return user.gameEnergy;
 }

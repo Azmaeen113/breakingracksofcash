@@ -15,9 +15,14 @@ const ICON_MAP: Record<string, React.ComponentType<any>> = {
   twitter: FaTwitter,
 };
 
+// Minimum seconds user must wait after opening a social link before claiming
+const SOCIAL_CLAIM_DELAY_MS = 8000;
+
 export default function TasksPage() {
   const { user, userId, refreshUser } = useUser();
   const [claiming, setClaiming] = useState<string | null>(null);
+  // Track which social tasks have been opened (taskId -> timestamp when opened)
+  const [openedTasks, setOpenedTasks] = useState<Record<string, number>>({});
 
   if (!user) return null;
 
@@ -31,6 +36,21 @@ export default function TasksPage() {
     if (task.referralCount && (user.referralCount || 0) < task.referralCount) {
       toast.error(`You need ${task.referralCount} referrals (have ${user.referralCount || 0})`);
       return;
+    }
+
+    // Validate social tasks: must have opened the link first and waited
+    if (task.type === 'social' && task.link) {
+      const openedAt = openedTasks[taskId];
+      if (!openedAt) {
+        toast.error('Please open the link first, then claim');
+        return;
+      }
+      const elapsed = Date.now() - openedAt;
+      if (elapsed < SOCIAL_CLAIM_DELAY_MS) {
+        const remaining = Math.ceil((SOCIAL_CLAIM_DELAY_MS - elapsed) / 1000);
+        toast.error(`Please wait ${remaining}s after joining to claim`);
+        return;
+      }
     }
 
     setClaiming(taskId);
@@ -50,7 +70,23 @@ export default function TasksPage() {
   const handleTaskClick = (task: typeof TASKS[0]) => {
     if (task.link) {
       window.open(task.link, '_blank');
+      // Record that this social task link was opened
+      if (task.type === 'social') {
+        setOpenedTasks(prev => ({ ...prev, [task.id]: Date.now() }));
+        toast.success('Link opened! You can claim in a few seconds', {
+          icon: '✅',
+          duration: 4000,
+        });
+      }
     }
+  };
+
+  // Check if a social task can be claimed (link was opened and delay passed)
+  const canClaimSocial = (task: typeof TASKS[0]): boolean => {
+    if (task.type !== 'social' || !task.link) return true;
+    const openedAt = openedTasks[task.id];
+    if (!openedAt) return false;
+    return (Date.now() - openedAt) >= SOCIAL_CLAIM_DELAY_MS;
   };
 
   return (
@@ -76,6 +112,10 @@ export default function TasksPage() {
           {filtered.map((task, idx) => {
             const isDone = completedTasks.includes(task.id);
             const Icon = ICON_MAP[task.icon] || FaUsers;
+            const isSocial = task.type === 'social' && !!task.link;
+            const socialOpened = isSocial ? !!openedTasks[task.id] : false;
+            const socialReady = canClaimSocial(task);
+
             return (
               <motion.div
                 key={task.id}
@@ -113,18 +153,26 @@ export default function TasksPage() {
                     {task.link && (
                       <button
                         onClick={() => handleTaskClick(task)}
-                        className="px-3 py-1.5 rounded-lg bg-cyber-dark border border-gray-700/50 text-[10px] text-gray-400 flex items-center gap-1"
+                        className={`px-3 py-1.5 rounded-lg text-[10px] flex items-center gap-1 ${
+                          socialOpened
+                            ? 'bg-green-500/10 border border-green-500/30 text-green-400'
+                            : 'bg-cyber-dark border border-gray-700/50 text-gray-400'
+                        }`}
                       >
-                        <FaExternalLinkAlt className="text-[8px]" /> Open
+                        <FaExternalLinkAlt className="text-[8px]" />
+                        {socialOpened ? 'Opened ✓' : 'Open'}
                       </button>
                     )}
-                    <button
-                      onClick={() => handleClaim(task.id, task.reward, task)}
-                      disabled={claiming === task.id}
-                      className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-cyber-cyan to-cyber-purple text-[10px] text-white font-orbitron disabled:opacity-50"
-                    >
-                      {claiming === task.id ? '...' : 'Claim'}
-                    </button>
+                    {/* Only show Claim for social tasks after link is opened */}
+                    {(!isSocial || socialOpened) && (
+                      <button
+                        onClick={() => handleClaim(task.id, task.reward, task)}
+                        disabled={claiming === task.id || (isSocial && !socialReady)}
+                        className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-cyber-cyan to-cyber-purple text-[10px] text-white font-orbitron disabled:opacity-50"
+                      >
+                        {claiming === task.id ? '...' : (isSocial && !socialReady ? 'Wait...' : 'Claim')}
+                      </button>
+                    )}
                   </div>
                 )}
               </motion.div>

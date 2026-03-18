@@ -213,6 +213,7 @@ if (RACK_ATTACK) {
   var raPausedAt = 0;
   var raPreservingTimer = false;  // true during rack reset to prevent timer reset
   var raRacksCleared = 0;        // count of racks completed
+  var raResettingRack = false;    // true during the rack-reset transition
 
   window._origStartTimer = window.startTimer;
   window.startTimer = function() {
@@ -257,9 +258,14 @@ if (RACK_ATTACK) {
       // All 15 balls cleared including 8-ball → reset rack, +20 seconds
       raRacksCleared++;
       raPreservingTimer = true;
+      raResettingRack = true;
       raStartTime += 20000; // +20 seconds bonus
       raPausedAt = 0;
       projectInfo.levelComplete = true;
+      // Suppress any game-over the engine might set during transition
+      gi.gameOver = false;
+      gi.gameRunning = true;
+      gi.foulDisplayComplete = true;
       // Brief delay so pocket animation finishes, then re-rack
       game.time.events.add(1.5 * Phaser.Timer.SECOND, function() {
         game.state.start('play');
@@ -384,6 +390,7 @@ if (RACK_ATTACK) {
     if (raPreservingTimer) {
       // Rack reset: keep timer running, only reset game-ended flag
       raGameEnded = false;
+      raResettingRack = false;
       raPausedAt = 0;
       // Show remaining time immediately
       if (gi.timerText && raTimerStarted) {
@@ -393,10 +400,15 @@ if (RACK_ATTACK) {
         var secs = remaining % 60;
         gi.timerText.text = mins + ':' + (secs < 10 ? '0' : '') + secs;
       }
+      // Ensure cue stick and game are ready for the new rack
+      gi.gameRunning = true;
+      gi.gameOver = false;
+      gi.foulDisplayComplete = true;
     } else {
       // Fresh game: full reset
       raTimerStarted = false;
       raGameEnded = false;
+      raResettingRack = false;
       raStartTime = 0;
       raPausedAt = 0;
       raRacksCleared = 0;
@@ -494,13 +506,25 @@ if (RACK_ATTACK) {
     }
 
     // Safety: ensure gameRunning is true when not in game-over and not paused
-    if (!gi.gameRunning && !gi.gameOver && !raGameEnded && !gi.shotRunning &&
+    if (!gi.gameRunning && !gi.gameOver && !raGameEnded && !raResettingRack && !gi.shotRunning &&
         !(gi.popUpPanel && gi.popUpPanel.visible)) {
       gi.gameRunning = true;
     }
 
+    // During rack-reset transition, aggressively suppress game-over
+    if (raResettingRack) {
+      gi.gameOver = false;
+      gi.winner = undefined;
+      gi.foulDisplayComplete = true;
+      if (gi.gameOverPanel) gi.gameOverPanel.visible = false;
+      // Keep timer running during rack-reset transition
+      if (raTimerStarted) {
+        updateTimer();
+      }
+    }
+
     // Only the 90-s timer or early 8-ball should cause game-over; cancel anything else
-    if (gi.gameOver && !raGameEnded) {
+    if (gi.gameOver && !raGameEnded && !raResettingRack) {
       gi.gameOver = false;
       gi.winner = undefined;
       gi.gameRunning = true;
@@ -522,7 +546,7 @@ if (RACK_ATTACK) {
     }
 
     // Safety: ensure cue stick stays visible when game is running (not game-over)
-    if (!gi.gameOver && !raGameEnded && !gi.shotRunning &&
+    if (!gi.gameOver && !raGameEnded && !raResettingRack && !gi.shotRunning &&
         !(gi.popUpPanel && gi.popUpPanel.visible)) {
       if (gi.cueBaseCanvas && !gi.cueBaseCanvas.visible) gi.cueBaseCanvas.visible = true;
       if (gi.guideCanvas && !gi.guideCanvas.visible) gi.guideCanvas.visible = true;

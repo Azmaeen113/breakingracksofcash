@@ -35,7 +35,7 @@ function formatTimeLeft(target: Date): string {
 }
 
 export default function LeaderboardPage() {
-  const { user, userId } = useUser();
+  const { user, userId, refreshUser } = useUser();
   const [tab, setTab] = useState<'weekly' | 'monthly'>('weekly');
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,6 +59,8 @@ export default function LeaderboardPage() {
     const load = async () => {
       setLoading(true);
       try {
+        // Refresh user data so local balance stays in sync with server
+        await refreshUser();
         const data = tab === 'weekly'
           ? await getWeeklyLeaderboard(50)
           : await getMonthlyLeaderboard(50);
