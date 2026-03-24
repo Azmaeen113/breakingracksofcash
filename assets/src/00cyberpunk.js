@@ -251,8 +251,9 @@ if (RACK_ATTACK) {
   };
 
   // ── Override checkLevelComplete: Rack Attack needs ALL balls (including 8-ball) cleared ──
-  var _origCheckLevelComplete = checkLevelComplete;
-  checkLevelComplete = function() {
+  // We overwrite the global function entirely so even _origOnContact calls our version.
+  window.checkLevelComplete = function() {
+    if (typeof playState === 'undefined' || !playState.gameInfo) return;
     var gi = playState.gameInfo;
     if (gi.numBalls <= 0 && !raGameEnded) {
       // All 15 balls cleared including 8-ball → reset rack, +20 seconds
@@ -271,8 +272,6 @@ if (RACK_ATTACK) {
         game.state.start('play');
       }, this);
     }
-    // Don't call original — it would set levelComplete at numBalls<=1
-    // In Rack Attack, we only complete when numBalls<=0
   };
 
   // ── Custom contact handler for Rack Attack ──
@@ -338,7 +337,7 @@ if (RACK_ATTACK) {
         return;
       }
 
-      // 8-ball is the LAST ball — award points, then checkLevelComplete triggers rack reset
+      // 8-ball is the LAST ball — award points, decrement balls, THEN call checkLevelComplete
       ball.active = false;
       ball.velocity = new Vector2D(0, 0);
       var info2 = new Object();
@@ -352,9 +351,12 @@ if (RACK_ATTACK) {
       if (!gi.trial) {
         playPocketSound(evt);
         playPocketAnimation(evt);
-        gi.numBalls--;
+        gi.numBalls--; // Decrement BEFORE calling checkLevelComplete
         gi.pottedBallArray.push(ball.id);
-        checkLevelComplete();
+        
+        // This will now see numBalls <= 0 and trigger rack reset
+        window.checkLevelComplete();
+        
         gi.ballPotted = true;
         if (projectInfo.mode === 1 && gi.turn === 'p1') {
           var dp = evt.target.dropPosition;
@@ -585,16 +587,42 @@ if (RACK_ATTACK) {
     if (gameOverSent) return;
     if (typeof playState === 'undefined' || !playState.gameInfo) return;
     var gi = playState.gameInfo;
+    
+    // In Rack Attack, auto-send game over when time runs out
     if (RACK_ATTACK && gi.gameOver && !gameOverSent) {
       gameOverSent = true;
       try { window.parent.postMessage({ type: 'GAME_OVER', finalScore: projectInfo.score || 0 }, '*'); } catch(e) {}
-      return;
     }
+    
+    // When the quit button is shown (or clicked) at game over
     if (gi.gameOver && gi.quitButton2 && gi.quitButton2.visible) {
       gameOverSent = true;
       try { window.parent.postMessage({ type: 'GAME_OVER', finalScore: projectInfo.score || 0 }, '*'); } catch(e) {}
     }
   }, 500);
+
+  // Hook into the quit buttons to send home message
+  setInterval(function() {
+    if (typeof playState === 'undefined' || !playState.gameInfo) return;
+    var gi = playState.gameInfo;
+    
+    if (!window._homeHooked && gi.quitButton2) {
+      window._homeHooked = true;
+      var _origQuit2 = gi.quitButton2.events.onInputUp;
+      gi.quitButton2.events.onInputUp.removeAll();
+      gi.quitButton2.events.onInputUp.add(function() {
+        try { window.parent.postMessage({ type: 'GO_HOME', finalScore: projectInfo.score || 0 }, '*'); } catch(e) {}
+      }, this);
+    }
+    
+    if (typeof menuState !== 'undefined' && menuState.menuInfo) {
+      var t = menuState.menuInfo;
+      if (!window._menuHomeHooked && t.quitStatsButton) {
+        window._menuHomeHooked = true;
+        // Don't need to hook the stats back button, it stays in game iframe
+      }
+    }
+  }, 1000);
 })();
 
 console.log('%c BREAKING RACKS 4 CASH ', 'background: #0d0221; color: #00FFF0; font-size: 20px; font-weight: bold; padding: 10px; border: 2px solid #FF2D95; text-shadow: 0 0 10px #00FFF0;');
