@@ -123,6 +123,7 @@ export interface Task {
   icon: string;
   link?: string;
   referralCount?: number;
+  comingSoon?: boolean;
 }
 
 // ─── VIP Plan ───────────────────────────────────────

@@ -142,6 +142,7 @@ export default function TasksPage() {
             const socialReady = canClaimSocial(task);
             const hasReward = task.reward > 0;
             const infoOnly = isInfoOnly(task);
+            const isLocked = !!task.comingSoon;
 
             return (
               <motion.div
@@ -149,16 +150,16 @@ export default function TasksPage() {
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ delay: idx * 0.05 }}
-                className={`glass-card p-4 flex items-center gap-4 ${isDone ? 'opacity-60' : ''}`}
+                className={`glass-card p-4 flex items-center gap-4 ${isDone ? 'opacity-60' : ''} ${isLocked ? 'opacity-40' : ''}`}
               >
                 {/* Icon */}
                 <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                  isDone ? 'bg-green-500/10' : 'bg-cyber-cyan/10'
+                  isDone ? 'bg-green-500/10' : isLocked ? 'bg-gray-700/10' : 'bg-cyber-cyan/10'
                 }`}>
                   {isDone ? (
                     <FaCheck className="text-green-400" />
                   ) : (
-                    <Icon className="text-cyber-cyan text-lg" />
+                    <Icon className={isLocked ? 'text-gray-600 text-lg' : 'text-cyber-cyan text-lg'} />
                   )}
                 </div>
 
@@ -166,16 +167,24 @@ export default function TasksPage() {
                 <div className="flex-1 min-w-0">
                   <p className="font-orbitron text-xs text-white truncate">{task.title}</p>
                   <p className="text-[10px] text-gray-500">{task.description}</p>
-                  {hasReward && (
+                  {hasReward && !isLocked && (
                     <div className="flex items-center gap-1 mt-1">
                       <FaCoins className="text-cyber-gold text-[10px]" />
                       <span className="text-[10px] text-cyber-gold font-orbitron">+{task.reward.toLocaleString()}</span>
                     </div>
                   )}
+                  {hasReward && isLocked && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <FaCoins className="text-gray-600 text-[10px]" />
+                      <span className="text-[10px] text-gray-600 font-orbitron">+{task.reward.toLocaleString()}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Action */}
-                {isDone ? (
+                {isLocked ? (
+                  <span className="text-[10px] text-gray-600 font-orbitron">SOON</span>
+                ) : isDone ? (
                   <span className="text-[10px] text-green-400 font-orbitron">DONE</span>
                 ) : infoOnly ? (
                   /* Info-only tasks (e.g. wallet) — no claim, no points */
