@@ -32,6 +32,9 @@ export default function TasksPage() {
   const handleClaim = async (taskId: string, reward: number, task: typeof TASKS[0]) => {
     if (claiming) return;
 
+    // Zero-reward tasks don't need claiming through this flow
+    if (reward === 0) return;
+
     // Validate referral tasks
     if (task.referralCount && (user.referralCount || 0) < task.referralCount) {
       toast.error(`You need ${task.referralCount} referrals (have ${user.referralCount || 0})`);
@@ -57,17 +60,10 @@ export default function TasksPage() {
     try {
       await completeTask(userId, taskId, reward);
       await refreshUser();
-      if (reward > 0) {
-        toast.success(`+${reward.toLocaleString()} CASH earned!`, {
-          icon: '🎉',
-          style: { background: '#1a0a2e', color: '#fff', border: '1px solid rgba(0,255,255,0.3)' },
-        });
-      } else {
-        toast.success('Task completed!', {
-          icon: '✅',
-          style: { background: '#1a0a2e', color: '#fff', border: '1px solid rgba(0,255,255,0.3)' },
-        });
-      }
+      toast.success(`+${reward.toLocaleString()} CASH earned!`, {
+        icon: '🎉',
+        style: { background: '#1a0a2e', color: '#fff', border: '1px solid rgba(0,255,255,0.3)' },
+      });
     } catch {
       toast.error('Failed to claim');
     }
@@ -77,26 +73,22 @@ export default function TasksPage() {
   const handleTaskClick = async (task: typeof TASKS[0]) => {
     if (task.link) {
       window.open(task.link, '_blank');
-      // For 0-reward social tasks, auto-complete on link open (just mark done, no points)
-      if (task.type === 'social' && task.reward === 0 && !completedTasks.includes(task.id)) {
-        setOpenedTasks(prev => ({ ...prev, [task.id]: Date.now() }));
-        // Auto-mark as done after a short delay
-        setClaiming(task.id);
-        try {
-          await completeTask(userId, task.id, 0);
-          await refreshUser();
-          toast.success('Task completed!', { icon: '✅', duration: 3000 });
-        } catch { /* ignore */ }
-        setClaiming(null);
-        return;
-      }
       // Record that this social task link was opened
       if (task.type === 'social') {
         setOpenedTasks(prev => ({ ...prev, [task.id]: Date.now() }));
-        toast.success('Link opened! You can claim in a few seconds', {
-          icon: '✅',
-          duration: 4000,
-        });
+        // Zero-reward social tasks: auto-complete on link open (no points awarded)
+        if (task.reward === 0 && !completedTasks.includes(task.id)) {
+          try {
+            await completeTask(userId, task.id, 0);
+            await refreshUser();
+            toast.success('Task completed!', { icon: '✅', duration: 3000 });
+          } catch { /* silent */ }
+        } else if (task.reward > 0) {
+          toast.success('Link opened! You can claim in a few seconds', {
+            icon: '✅',
+            duration: 4000,
+          });
+        }
       }
     }
   };
@@ -107,11 +99,6 @@ export default function TasksPage() {
     const openedAt = openedTasks[task.id];
     if (!openedAt) return false;
     return (Date.now() - openedAt) >= SOCIAL_CLAIM_DELAY_MS;
-  };
-
-  // Whether a task is info-only (0-reward, no link, like wallet)
-  const isInfoOnly = (task: typeof TASKS[0]): boolean => {
-    return task.reward === 0 && !task.link;
   };
 
   return (
@@ -128,7 +115,12 @@ export default function TasksPage() {
       {/* Total earned from tasks */}
       <div className="glass-card p-3 flex items-center justify-between">
         <span className="text-xs text-gray-500">Completed</span>
-        <span className="font-orbitron text-sm text-cyber-cyan">{completedTasks.length}/{TASKS.length}</span>
+        <span className="font-orbitron text-sm text-cyber-cyan">
+          {completedTasks.filter(id => {
+            const t = TASKS.find(tk => tk.id === id);
+            return t && t.reward > 0;
+          }).length}/{TASKS.filter(t => t.reward > 0).length}
+        </span>
       </div>
 
       {/* Task list */}
@@ -140,9 +132,6 @@ export default function TasksPage() {
             const isSocial = task.type === 'social' && !!task.link;
             const socialOpened = isSocial ? !!openedTasks[task.id] : false;
             const socialReady = canClaimSocial(task);
-            const hasReward = task.reward > 0;
-            const infoOnly = isInfoOnly(task);
-            const isLocked = !!task.comingSoon;
 
             return (
               <motion.div
@@ -150,16 +139,16 @@ export default function TasksPage() {
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ delay: idx * 0.05 }}
-                className={`glass-card p-4 flex items-center gap-4 ${isDone ? 'opacity-60' : ''} ${isLocked ? 'opacity-40' : ''}`}
+                className={`glass-card p-4 flex items-center gap-4 ${isDone ? 'opacity-60' : ''}`}
               >
                 {/* Icon */}
                 <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                  isDone ? 'bg-green-500/10' : isLocked ? 'bg-gray-700/10' : 'bg-cyber-cyan/10'
+                  isDone ? 'bg-green-500/10' : 'bg-cyber-cyan/10'
                 }`}>
                   {isDone ? (
                     <FaCheck className="text-green-400" />
                   ) : (
-                    <Icon className={isLocked ? 'text-gray-600 text-lg' : 'text-cyber-cyan text-lg'} />
+                    <Icon className="text-cyber-cyan text-lg" />
                   )}
                 </div>
 
@@ -167,46 +156,48 @@ export default function TasksPage() {
                 <div className="flex-1 min-w-0">
                   <p className="font-orbitron text-xs text-white truncate">{task.title}</p>
                   <p className="text-[10px] text-gray-500">{task.description}</p>
-                  {hasReward && !isLocked && (
-                    <div className="flex items-center gap-1 mt-1">
-                      <FaCoins className="text-cyber-gold text-[10px]" />
-                      <span className="text-[10px] text-cyber-gold font-orbitron">+{task.reward.toLocaleString()}</span>
-                    </div>
-                  )}
-                  {hasReward && isLocked && (
-                    <div className="flex items-center gap-1 mt-1">
-                      <FaCoins className="text-gray-600 text-[10px]" />
-                      <span className="text-[10px] text-gray-600 font-orbitron">+{task.reward.toLocaleString()}</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1 mt-1">
+                    {task.reward > 0 ? (
+                      <>
+                        <FaCoins className="text-cyber-gold text-[10px]" />
+                        <span className="text-[10px] text-cyber-gold font-orbitron">+{task.reward.toLocaleString()}</span>
+                      </>
+                    ) : (
+                      <span className="text-[10px] text-gray-500 font-orbitron">No Points</span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Action */}
-                {isLocked ? (
-                  <span className="text-[10px] text-gray-600 font-orbitron">SOON</span>
-                ) : isDone ? (
+                {isDone ? (
                   <span className="text-[10px] text-green-400 font-orbitron">DONE</span>
-                ) : infoOnly ? (
-                  /* Info-only tasks (e.g. wallet) — no claim, no points */
-                  <span className="text-[10px] text-gray-500 font-orbitron">INFO</span>
                 ) : (
                   <div className="flex flex-col gap-1.5">
                     {task.link && (
                       <button
                         onClick={() => handleTaskClick(task)}
-                        disabled={claiming === task.id}
                         className={`px-3 py-1.5 rounded-lg text-[10px] flex items-center gap-1 ${
-                          socialOpened || (isSocial && isDone)
+                          socialOpened
                             ? 'bg-green-500/10 border border-green-500/30 text-green-400'
                             : 'bg-cyber-dark border border-gray-700/50 text-gray-400'
                         }`}
                       >
                         <FaExternalLinkAlt className="text-[8px]" />
-                        {claiming === task.id ? '...' : (socialOpened ? 'Opened ✓' : (hasReward ? 'Open' : 'Join'))}
+                        {socialOpened ? 'Opened ✓' : task.reward === 0 ? 'Join' : 'Open'}
                       </button>
                     )}
-                    {/* Only show Claim button for tasks that give rewards */}
-                    {hasReward && (!isSocial || socialOpened) && (
+                    {/* Wallet task with no link and no reward: show link to wallet page */}
+                    {task.id === 'wallet' && !task.link && task.reward === 0 && (
+                      <button
+                        onClick={() => window.location.hash = '#wallet'}
+                        className="px-3 py-1.5 rounded-lg bg-cyber-dark border border-gray-700/50 text-[10px] text-gray-400 flex items-center gap-1"
+                      >
+                        <FaWallet className="text-[8px]" />
+                        Go to Wallet
+                      </button>
+                    )}
+                    {/* Only show Claim button for tasks with reward > 0 */}
+                    {task.reward > 0 && (!isSocial || socialOpened) && (
                       <button
                         onClick={() => handleClaim(task.id, task.reward, task)}
                         disabled={claiming === task.id || (isSocial && !socialReady)}

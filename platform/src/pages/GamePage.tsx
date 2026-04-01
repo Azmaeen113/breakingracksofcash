@@ -19,8 +19,12 @@ export default function GamePage() {
     ? '/game/index.html?mode=rackattack'
     : '/game/index.html';
 
+  const energySpentRef = useRef(false);
+
   // Spend energy in background — don't block game loading
   useEffect(() => {
+    if (energySpentRef.current) return; // Already spent energy for this game session
+    energySpentRef.current = true;
     let cancelled = false;
     spendEnergy(userId).then(async (success) => {
       if (cancelled) return;

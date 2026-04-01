@@ -96,45 +96,33 @@ export async function changeUsername(userId: string, newName: string): Promise<b
 
 // ─── Energy System ──────────────────────────────────
 
-function isSameUTCDay(a: Date, b: Date): boolean {
-  return a.getUTCFullYear() === b.getUTCFullYear() &&
-         a.getUTCMonth() === b.getUTCMonth() &&
-         a.getUTCDate() === b.getUTCDate();
-}
-
 export async function checkAndResetEnergy(userId: string, user: UserData): Promise<number> {
   const now = new Date();
   const lastReset = user.lastEnergyReset?.toDate();
-  if (!lastReset || !isSameUTCDay(now, lastReset)) {
-    // New day: reset energy to league base + VIP bonus, capped
+  if (!lastReset || now.toDateString() !== lastReset.toDateString()) {
+    // League energy + VIP bonus (additive), capped at MAX_ENERGY_PER_DAY
     const vipBonus = VIP_ENERGY_BONUS[user.vipTier] ?? 0;
     const league = getUserLeague(user.seasonCash);
     const dailyEnergy = Math.min(league.energyPerDay + vipBonus, MAX_ENERGY_PER_DAY);
-    // Preserve purchased energy if they bought extra
+    // Preserve purchased energy: if user has more energy than daily base,
+    // keep the higher value (they likely bought extra energy yesterday)
     const currentEnergy = user.gameEnergy ?? 0;
     const finalEnergy = Math.max(dailyEnergy, currentEnergy);
-    await updateDoc(doc(db, 'users', userId), {
+    await updateUser(userId, {
       gameEnergy: finalEnergy,
       lastEnergyReset: Timestamp.now(),
-      updatedAt: serverTimestamp(),
-    });
+    } as any);
     return finalEnergy;
   }
   return user.gameEnergy;
 }
 
 export async function spendEnergy(userId: string): Promise<boolean> {
-  // Re-read the user fresh to avoid stale cached data
   const user = await getUser(userId);
   if (!user) return false;
-  // Check/reset energy for new day
   const energy = await checkAndResetEnergy(userId, user);
   if (energy <= 0) return false;
-  // Atomic decrement — this is safe even if checkAndResetEnergy just set a value
-  await updateDoc(doc(db, 'users', userId), {
-    gameEnergy: increment(-1),
-    updatedAt: serverTimestamp(),
-  });
+  await updateDoc(doc(db, 'users', userId), { gameEnergy: increment(-1) });
   return true;
 }
 
@@ -227,24 +215,19 @@ export async function claimDailyReward(userId: string, day: number, reward: numb
 
   const now = new Date();
   const last = user.lastDailyReward?.toDate();
+  if (last && now.toDateString() === last.toDateString()) return false;
 
-  // Already claimed today — use UTC to avoid timezone drift
-  if (last && isSameUTCDay(now, last)) return false;
-
-  // Calculate which day in the streak we're on
-  let newDay = 1; // default: start fresh
+  let newDay = 1;
   if (last) {
-    // Use UTC day difference to avoid timezone issues
-    const nowUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-    const lastUTC = Date.UTC(last.getUTCFullYear(), last.getUTCMonth(), last.getUTCDate());
-    const diffDays = Math.round((nowUTC - lastUTC) / (1000 * 60 * 60 * 24));
-
+    // Compare calendar dates in UTC to avoid timezone/DST edge cases
+    const nowUTC = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    const lastUTC = new Date(Date.UTC(last.getFullYear(), last.getMonth(), last.getDate()));
+    const diffDays = Math.round((nowUTC.getTime() - lastUTC.getTime()) / (1000 * 60 * 60 * 24));
     if (diffDays === 1) {
-      // Consecutive day: increment (wrap from 7 back to 1)
       newDay = user.dailyRewardDay >= 7 ? 1 : user.dailyRewardDay + 1;
     }
-    // diffDays > 1: streak broken, reset to day 1
-    // diffDays === 0: already handled above (same day)
+    // diffDays > 1 means streak broken → reset to day 1 (newDay stays 1)
+    // diffDays === 0 should not happen due to the early return above
   }
 
   await updateDoc(doc(db, 'users', userId), {
