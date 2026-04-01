@@ -169,7 +169,9 @@ export default function TasksPage() {
                 </div>
 
                 {/* Action */}
-                {isDone ? (
+                {task.reward === 0 ? (
+                  <span className="px-3 py-1.5 rounded-lg border border-cyber-cyan/30 bg-cyber-cyan/10 text-[10px] text-cyber-cyan font-orbitron text-center">SOON</span>
+                ) : isDone ? (
                   <span className="text-[10px] text-green-400 font-orbitron">DONE</span>
                 ) : (
                   <div className="flex flex-col gap-1.5">
@@ -183,17 +185,7 @@ export default function TasksPage() {
                         }`}
                       >
                         <FaExternalLinkAlt className="text-[8px]" />
-                        {socialOpened ? 'Opened ✓' : task.reward === 0 ? 'Join' : 'Open'}
-                      </button>
-                    )}
-                    {/* Wallet task with no link and no reward: show link to wallet page */}
-                    {task.id === 'wallet' && !task.link && task.reward === 0 && (
-                      <button
-                        onClick={() => window.location.hash = '#wallet'}
-                        className="px-3 py-1.5 rounded-lg bg-cyber-dark border border-gray-700/50 text-[10px] text-gray-400 flex items-center gap-1"
-                      >
-                        <FaWallet className="text-[8px]" />
-                        Go to Wallet
+                        {socialOpened ? 'Opened ✓' : 'Open'}
                       </button>
                     )}
                     {/* Only show Claim button for tasks with reward > 0 */}
