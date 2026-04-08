@@ -59,6 +59,19 @@ export default function GamePage() {
       if (e.data?.type === 'GAME_OVER') {
         handleGameOver(e.data.finalScore || 0);
       }
+      if (e.data?.type === 'REPLAY_GAME') {
+        const score = e.data.finalScore || 0;
+        // Process score first if not already done
+        if (score > 0 && !gameEndedRef.current) {
+          gameEndedRef.current = true;
+          setGameEnded(true);
+          addGameScore(userId, score).then(() => refreshUser()).catch(() => {});
+        } else {
+          refreshUser().catch(() => {});
+        }
+        // Instead of reloading just the iframe, trigger a page reload to cleanly remount everything, deducting energy again
+        window.location.reload();
+      }
       if (e.data?.type === 'GO_HOME') {
         const score = e.data.finalScore || 0;
         // Only add score if GAME_OVER hasn't already been processed
