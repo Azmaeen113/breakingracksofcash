@@ -115,12 +115,7 @@ export default function TasksPage() {
       {/* Total earned from tasks */}
       <div className="glass-card p-3 flex items-center justify-between">
         <span className="text-xs text-gray-500">Completed</span>
-        <span className="font-orbitron text-sm text-cyber-cyan">
-          {completedTasks.filter(id => {
-            const t = TASKS.find(tk => tk.id === id);
-            return t && t.reward > 0;
-          }).length}/{TASKS.filter(t => t.reward > 0).length}
-        </span>
+        <span className="font-orbitron text-sm text-cyber-cyan">{completedTasks.length}/{TASKS.length}</span>
       </div>
 
       {/* Task list */}
@@ -169,36 +164,12 @@ export default function TasksPage() {
                 </div>
 
                 {/* Action */}
-                {task.reward === 0 ? (
+                {['wallet', 'telegram', 'twitter'].includes(task.id) ? (
                   <span className="px-3 py-1.5 rounded-lg border border-cyber-cyan/30 bg-cyber-cyan/10 text-[10px] text-cyber-cyan font-orbitron text-center">SOON</span>
                 ) : isDone ? (
                   <span className="text-[10px] text-green-400 font-orbitron">DONE</span>
                 ) : (
-                  <div className="flex flex-col gap-1.5">
-                    {task.link && (
-                      <button
-                        onClick={() => handleTaskClick(task)}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] flex items-center gap-1 ${
-                          socialOpened
-                            ? 'bg-green-500/10 border border-green-500/30 text-green-400'
-                            : 'bg-cyber-dark border border-gray-700/50 text-gray-400'
-                        }`}
-                      >
-                        <FaExternalLinkAlt className="text-[8px]" />
-                        {socialOpened ? 'Opened ✓' : 'Open'}
-                      </button>
-                    )}
-                    {/* Only show Claim button for tasks with reward > 0 */}
-                    {task.reward > 0 && (!isSocial || socialOpened) && (
-                      <button
-                        onClick={() => handleClaim(task.id, task.reward, task)}
-                        disabled={claiming === task.id || (isSocial && !socialReady)}
-                        className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-cyber-cyan to-cyber-purple text-[10px] text-white font-orbitron disabled:opacity-50"
-                      >
-                        {claiming === task.id ? '...' : (isSocial && !socialReady ? 'Wait...' : 'Claim')}
-                      </button>
-                    )}
-                  </div>
+                  <span className="text-[10px] text-gray-500 font-orbitron">No Points</span>
                 )}
               </motion.div>
             );

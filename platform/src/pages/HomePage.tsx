@@ -3,19 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useUser } from '@/context/UserContext';
 import TapTarget from '@/components/TapTarget';
-import DailyRewardModal from '@/components/DailyRewardModal';
+
 import LeagueSlider from '@/components/LeagueSlider';
-import { FaPlay, FaGift, FaBolt, FaCoins, FaGem, FaClock } from 'react-icons/fa';
+import { FaPlay, FaBolt, FaCoins, FaGem, FaClock } from 'react-icons/fa';
 
 export default function HomePage() {
   const { user, league, vipMultiplier } = useUser();
   const navigate = useNavigate();
-  const [showDaily, setShowDaily] = useState(false);
+
 
   if (!user) return null;
 
-  const canClaimDaily = !user.lastDailyReward ||
-    new Date().toDateString() !== user.lastDailyReward.toDate().toDateString();
+
 
   return (
     <div className="flex flex-col items-center gap-5 pb-28 px-4">
@@ -100,26 +99,7 @@ export default function HomePage() {
         <FaPlay className="text-cyber-pink text-sm" />
       </motion.button>
 
-      {/* Daily Reward CTA */}
-      {canClaimDaily && (
-        <motion.button
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          whileTap={{ scale: 0.97 }}
-          onClick={() => setShowDaily(true)}
-          className="w-full glass-card p-4 flex items-center gap-4 border border-cyber-gold/30"
-        >
-          <div className="w-12 h-12 rounded-xl bg-cyber-gold/10 flex items-center justify-center">
-            <FaGift className="text-cyber-gold text-xl" />
-          </div>
-          <div className="flex-1 text-left">
-            <p className="font-orbitron text-xs text-cyber-gold">Daily Reward Available!</p>
-            <p className="text-[10px] text-gray-500">Day {(user.dailyRewardDay || 0) + 1} — Claim now</p>
-          </div>
-          <div className="w-3 h-3 bg-cyber-gold rounded-full animate-pulse" />
-        </motion.button>
-      )}
+
 
       {/* Tap-to-Earn Section */}
       <div className="w-full">
@@ -135,8 +115,7 @@ export default function HomePage() {
         <LeagueSlider />
       </div>
 
-      {/* Modals */}
-      <DailyRewardModal open={showDaily} onClose={() => setShowDaily(false)} />
+
     </div>
   );
 }
