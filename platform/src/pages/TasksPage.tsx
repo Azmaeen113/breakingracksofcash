@@ -164,10 +164,17 @@ export default function TasksPage() {
                 </div>
 
                 {/* Action */}
-                {['wallet', 'telegram', 'twitter'].includes(task.id) ? (
+                {task.id === 'wallet' ? (
                   <span className="px-3 py-1.5 rounded-lg border border-cyber-cyan/30 bg-cyber-cyan/10 text-[10px] text-cyber-cyan font-orbitron text-center">SOON</span>
                 ) : isDone ? (
                   <span className="text-[10px] text-green-400 font-orbitron">DONE</span>
+                ) : task.link ? (
+                  <button 
+                    onClick={() => handleTaskClick(task)}
+                    className="px-3 py-1.5 rounded-lg border border-cyber-cyan bg-cyber-cyan/20 text-[10px] text-cyber-cyan font-orbitron transition-colors hover:bg-cyber-cyan/30 flex items-center justify-center min-w-[60px]"
+                  >
+                    START
+                  </button>
                 ) : (
                   <span className="text-[10px] text-gray-500 font-orbitron">No Points</span>
                 )}
